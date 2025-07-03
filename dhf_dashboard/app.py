@@ -6,7 +6,6 @@ import os
 
 # --- EXPLICIT, ABSOLUTE IMPORTS ---
 from dhf_dashboard.utils.session_state_manager import SessionStateManager
-# SME NOTE: Importing all new plotting functions
 from dhf_dashboard.utils.plot_utils import (
     create_gantt_chart, 
     create_progress_donut, 
@@ -66,7 +65,7 @@ st.title("🚀 DHF Command Center: Smart-Pill Combination Product")
 project_name = ssm.get_data("design_plan", "project_name")
 st.caption(f"Live monitoring, analytics, and compliance for **{project_name}**")
 
-# --- Sidebar Navigation (No changes needed here) ---
+# --- Sidebar Navigation ---
 with st.sidebar:
     st.header("DHF Section Navigation")
     page_options = ["1. Design Plan", "2. Risk Management File", "3. Human Factors", "4. Design Inputs", "5. Design Outputs", "6. Design Reviews & Gates", "7. Design Verification", "8. Design Validation", "9. Design Transfer", "10. Design Changes", "11. Project Task Editor"]
@@ -77,12 +76,11 @@ with st.sidebar:
 tab1, tab2, tab3, tab4 = st.tabs(["📊 Project Dashboard", "📈 Advanced Analytics", "📜 DHF Structure (V-Model)", "🗂️ DHF Section Details"])
 
 # ======================================================================================
-# --- TAB 1: PROJECT DASHBOARD (Completely Revamped by SME) ---
+# --- TAB 1: PROJECT DASHBOARD ---
 # ======================================================================================
 with tab1:
     st.header("Project Health & Key Performance Indicators (KPIs)")
     
-    # --- Row 1: High-Level Visuals ---
     col1, col2 = st.columns(2)
     with col1:
         completion_pct = tasks_df['completion_pct'].mean() if not tasks_df.empty else 0
@@ -92,7 +90,6 @@ with tab1:
 
     st.divider()
 
-    # --- Row 2: Tactical Details ---
     col3, col4 = st.columns(2)
     with col3:
         st.plotly_chart(create_action_item_chart(actions_df), use_container_width=True)
@@ -143,7 +140,7 @@ with tab2:
         render_action_item_tracker(ssm)
 
 # ======================================================================================
-# --- TAB 3: DHF STRUCTURE (V-Model) - Content Restored ---
+# --- TAB 3: DHF STRUCTURE (V-Model) ---
 # ======================================================================================
 with tab3:
     st.header("The Design Control Process (V-Model)")
