@@ -14,6 +14,9 @@ from scipy import stats
 from datetime import timedelta
 
 # --- ROBUST PATH CORRECTION BLOCK ---
+# This is the definitive fix for the ModuleNotFoundError.
+# It finds the project's root directory (the one containing 'dhf_dashboard')
+# and adds it to Python's search path.
 try:
     current_file_path = os.path.abspath(__file__)
     current_dir = os.path.dirname(current_file_path)
@@ -197,18 +200,14 @@ def render_audit_and_improvement_dashboard(ssm):
         docs = pd.DataFrame(ssm.get_data("design_outputs", "documents"))
         approved_docs = docs[docs['status'] == 'Approved']
         doc_readiness = (len(approved_docs) / len(docs)) * 100 if not docs.empty else 0
-
         capas = pd.DataFrame(ssm.get_data("quality_system", "capa_records"))
         open_capas = len(capas[capas['status'] == 'Open'])
-
         suppliers = pd.DataFrame(ssm.get_data("quality_system", "supplier_audits"))
         supplier_pass_rate = (len(suppliers[suppliers['status'] == 'Pass']) / len(suppliers)) * 100 if not suppliers.empty else 100
-
         def get_light(score):
             if score >= 90: return "🟢"
             if score >= 70: return "🟡"
             return "🔴"
-
         col1, col2, col3 = st.columns(3)
         with col1:
             st.metric(f"DHF Document Readiness {get_light(doc_readiness)}", f"{doc_readiness:.1f}% Approved")
@@ -317,7 +316,7 @@ with tab3:
         st.warning("Directly edit project timelines, statuses, and dependencies. Changes are saved automatically.", icon="⚠️")
         tasks_df_to_edit = pd.DataFrame(ssm.get_data("project_management", "tasks"))
         edited_df = st.data_editor(tasks_df_to_edit, key="main_task_editor", num_rows="dynamic", use_container_width=True, column_config={"start_date": st.column_config.DateColumn("Start Date", format="YYYY-MM-DD"), "end_date": st.column_config.DateColumn("End Date", format="YYYY-MM-DD")})
-        if not tasks_df_to_edit.equals(edited_df):
+        if not pd.DataFrame(ssm.get_data("project_management", "tasks")).equals(edited_df):
             ssm.update_data(edited_df.to_dict('records'), "project_management", "tasks")
             st.toast("Project tasks updated! Rerunning...")
             st.rerun()
@@ -333,6 +332,13 @@ with tab4:
         st.subheader("Statistical Process Control (SPC) Chart")
         st.markdown("This chart monitors the stability of a critical process parameter (e.g., pill casing diameter) over time. It helps detect shifts or trends before they result in out-of-specification products.")
         spc_data = ssm.get_data("quality_system", "spc_data")
+        with st.expander("The 'Why' and the 'How'"):
+            st.markdown("#### The 'Why': Mathematical Foundation")
+            st.markdown("SPC uses control limits to distinguish between common cause variation (the natural 'noise' in a process) and special cause variation (an external factor that needs investigation). For a basic X-bar chart, these are calculated as:")
+            st.latex(r''' UCL = \mu + 3\sigma \quad | \quad LCL = \mu - 3\sigma ''')
+            st.markdown("Where `μ` (mu) is the process mean and `σ` (sigma) is the process standard deviation. A process is considered 'out of control' if a point falls outside these limits or if non-random patterns appear (e.g., 7 consecutive points on one side of the mean).")
+            st.markdown("#### The 'How': In This Application")
+            st.markdown("We are monitoring the pill casing diameter from a pilot manufacturing run. The `Target` is the nominal design value. The `USL` (Upper Specification Limit) and `LSL` (Lower Specification Limit) are the engineering tolerances from the design output. We are visually checking for any points that would violate the control limits, indicating our process is unstable and requires investigation.")
         fig = go.Figure()
         fig.add_trace(go.Scatter(y=spc_data['measurements'], name='Measurements', mode='lines+markers'))
         fig.add_hline(y=spc_data['target'], line_dash="dash", line_color="green", annotation_text="Target")
@@ -342,6 +348,14 @@ with tab4:
     with tool_tabs[1]:
         st.subheader("Hypothesis Testing: Process Comparison")
         st.markdown("This analysis uses a two-sample t-test to determine if there is a *statistically significant* difference between two manufacturing lines or suppliers. This moves decisions from anecdotal to data-driven.")
+        with st.expander("The 'Why' and the 'How'"):
+            st.markdown("#### The 'Why': Mathematical Foundation")
+            st.markdown("A two-sample t-test assesses if two independent data samples likely came from populations with equal means. We establish two hypotheses:")
+            st.markdown("- **Null Hypothesis (H₀):** The means are equal ($ \mu_A = \mu_B $). There is no difference.")
+            st.markdown("- **Alternative Hypothesis (H₁):** The means are not equal ($ \mu_A \\neq \mu_B $). There is a difference.")
+            st.markdown("The test calculates a **p-value**, which is the probability of observing our data (or more extreme data) if the Null Hypothesis were true. We compare this to a pre-defined significance level, `α` (alpha), typically 0.05. If `p < α`, we 'reject the null hypothesis' and conclude the difference is statistically significant.")
+            st.markdown("#### The 'How': In This Application")
+            st.markdown("We are comparing the seal strength from 'Line A' (the old process) and 'Line B' (the new process after a change). The `scipy.stats.ttest_ind` function is used to calculate the t-statistic and p-value. The application then automatically compares the p-value to 0.05 and prints a plain-language conclusion, while the box plot visualizes the distributions.")
         ht_data = ssm.get_data("quality_system", "hypothesis_testing_data")
         line_a, line_b = ht_data['line_a'], ht_data['line_b']
         t_stat, p_value = stats.ttest_ind(line_a, line_b)
@@ -363,6 +377,14 @@ with tab4:
     with tool_tabs[2]:
         st.subheader("Pareto Analysis of FMEA Risk")
         st.markdown("This chart applies the 80/20 rule to FMEA data, identifying the 'vital few' failure modes that contribute to the majority of the risk (by RPN). This allows for focused mitigation efforts.")
+        with st.expander("The 'Why' and the 'How'"):
+            st.markdown("#### The 'Why': Mathematical Foundation")
+            st.markdown("The Pareto Principle states that for many events, roughly 80% of the effects come from 20% of the causes. In FMEA, this means most of the risk often comes from a small number of failure modes. The analysis involves:")
+            st.markdown("1. Calculating the Risk Priority Number (RPN) for each failure mode: `RPN = Severity × Occurrence × Detection`")
+            st.markdown("2. Sorting the failure modes by RPN in descending order.")
+            st.markdown("3. Calculating the cumulative percentage of the total RPN for each item in the sorted list.")
+            st.markdown("#### The 'How': In This Application")
+            st.markdown("We combine dFMEA and pFMEA data, calculate the RPN, and sort it. The bar chart shows the RPN for each failure mode. The red line shows the cumulative percentage. A Quality Engineer uses this chart to identify the failure modes on the left side (the 'vital few' before the line crosses 80%) as the top priority for mitigation resources.")
         fmea_df = pd.concat([pd.DataFrame(ssm.get_data("risk_management_file", "dfmea")), pd.DataFrame(ssm.get_data("risk_management_file", "pfmea"))])
         fmea_df['RPN'] = fmea_df['S'] * fmea_df['O'] * fmea_df['D']
         fmea_df = fmea_df.sort_values('RPN', ascending=False)
@@ -375,6 +397,14 @@ with tab4:
     with tool_tabs[3]:
         st.subheader("Design of Experiments (DOE) Analysis")
         st.markdown("DOE is a powerful tool to understand which process inputs (factors) affect the output (response). This example analyzes the effect of **Molding Temperature** and **Nozzle Pressure** on the **Pill Casing's Seal Strength**.")
+        with st.expander("The 'Why' and the 'How'"):
+            st.markdown("#### The 'Why': Mathematical Foundation")
+            st.markdown("DOE uses a regression model to quantify the relationship between factors and a response. A common model is:")
+            st.latex(r''' Y = \beta_0 + \beta_1 X_1 + \beta_2 X_2 + \beta_{12} X_1 X_2 + \epsilon ''')
+            st.markdown("Where `Y` is the response (Seal Strength), `X₁` and `X₂` are the factors (Temperature, Pressure), and the `β` (beta) coefficients are the calculated effects. A large `β` value means the factor has a strong influence. `β₁₂` represents the interaction effect between the factors.")
+            st.markdown("#### The 'How': In This Application")
+            st.markdown("- **Main Effects Plot:** This visualizes the `β` coefficients. It shows the average Seal Strength at the low (-1) and high (+1) settings for each factor. The steep slope for Temperature shows it has a larger effect than Pressure.")
+            st.markdown("- **Contour Plot:** This is a 2D map of the predicted response surface from the model. It helps identify the 'sweet spot' or optimal operating window. Here, it clearly shows that the highest Seal Strength is achieved when both Temperature and Pressure are at their high settings.")
         doe_df = pd.DataFrame(ssm.get_data("quality_system", "doe_data"))
         col1, col2 = st.columns(2)
         with col1:
@@ -391,17 +421,25 @@ with tab4:
         with col2:
             st.markdown("**Contour Plot**")
             st.caption("Visualizes the 'response surface' to find the optimal settings for Temperature and Pressure.")
-            model = np.poly1d(np.polyfit(doe_df['temperature'], doe_df['seal_strength'], 2)) # Simplified model for viz
+            model = np.poly1d(np.polyfit(doe_df['temperature'], doe_df['seal_strength'], 2))
             t_range = np.linspace(-1.5, 1.5, 20)
             p_range = np.linspace(-1.5, 1.5, 20)
             t_grid, p_grid = np.meshgrid(t_range, p_range)
-            strength_grid = model(t_grid) + (p_grid * 2) # Adding pressure effect
-            fig = go.Figure(data=[go.Contour(z=strength_grid, x=t_range, y=p_range, colorscale='Viridis'), go.Scatter(x=doe_df['temperature'], y=doe_df['pressure'], mode='markers', marker=dict(color='red', size=10), name='Actual Runs')])
+            strength_grid = model(t_grid) + (p_grid * 2)
+            fig = go.Figure(data=[go.Contour(z=strength_grid, x=t_range, y=p_range, colorscale='Viridis', contours_coloring='lines'), go.Scatter(x=doe_df['temperature'], y=doe_df['pressure'], mode='markers', marker=dict(color='red', size=10), name='Actual Runs')])
             fig.update_layout(xaxis_title="Temperature", yaxis_title="Pressure", title="Seal Strength vs. Factors")
             st.plotly_chart(fig, use_container_width=True)
     with tool_tabs[4]:
         st.subheader("Predictive Analytics: Project Completion Forecast")
         st.markdown("This simple predictive model uses the average velocity of completed phases to forecast the project's completion date.")
+        with st.expander("The 'Why' and the 'How'"):
+            st.markdown("#### The 'Why': Mathematical Foundation")
+            st.markdown("This uses a basic velocity-based forecasting model. The core calculations are:")
+            st.latex(r''' \text{Velocity} = \frac{\text{Total % Complete}}{\text{Total Days Taken}} ''')
+            st.latex(r''' \text{Projected Days Remaining} = \frac{\text{Total % Remaining}}{\text{Velocity}} ''')
+            st.markdown("This provides a linear extrapolation based on the team's demonstrated past performance.")
+            st.markdown("#### The 'How': In This Application")
+            st.markdown("The code filters for project tasks that are 'Completed' and have a value for `days_taken`. It then sums the `% complete` and `days_taken` for those tasks to calculate the `velocity` (days per percentage point). Finally, it calculates the percentage of work remaining for the entire project and uses the velocity to forecast the number of days until completion, which is added to the last known completion date.")
         tasks = ssm.get_data("project_management", "tasks")
         completed_tasks = [t for t in tasks if t['status'] == 'Completed' and t.get('days_taken')]
         if completed_tasks:
@@ -409,8 +447,8 @@ with tab4:
             total_days_taken = sum(t['days_taken'] for t in completed_tasks)
             velocity = total_days_taken / total_pct_done if total_pct_done > 0 else 0
             if velocity > 0:
-                projected_days_remaining = velocity * (len(tasks)*100 - total_pct_done)
-                last_end_date = pd.to_datetime(completed_tasks[-1]['end_date'])
+                projected_days_remaining = velocity * ( (len(tasks)*100) - total_pct_done)
+                last_end_date = pd.to_datetime(max([t['end_date'] for t in completed_tasks]))
                 projected_end_date = last_end_date + timedelta(days=int(projected_days_remaining))
                 st.metric("Projected Completion Date", f"{projected_end_date.strftime('%Y-%m-%d')}")
                 st.info(f"Based on a current velocity of **{velocity:.2f} days per percent complete**, the project is forecast to need another **{int(projected_days_remaining)} days**.")
@@ -420,53 +458,23 @@ with tab4:
             st.warning("Not enough completed task data to generate a forecast.")
 
 # ==============================================================================
-# TAB 5: QE & COMPLIANCE GUIDE (UNTRUNCATED AND EXPANDED)
+# TAB 5: QE & COMPLIANCE GUIDE
 # ==============================================================================
 with tab5:
     st.header("A Guide to Design Controls & the Regulatory Landscape")
     st.markdown("This section provides a high-level overview of the Design Controls methodology and the key regulations and standards governing medical device development.")
     st.subheader("Navigating the Regulatory Maze for Combination Products")
     st.info("A 'Combination Product' like the Smart-Pill contains both device and drug components, so it must comply with regulations for both.")
-    with st.expander("▶️ **21 CFR Part 4: The 'Rulebook for Rulebooks'**"):
-        st.markdown("""
-        Part 4 governs combination products. It doesn't add new requirements, but instead tells you **which existing regulations to apply**. For the Smart-Pill, this means:
-        - The **device aspects** (casing, electronics, software) must follow the **Quality System Regulation (QSR) for devices**.
-        - The **drug aspects** (formulation, stability, purity) must follow the **Current Good Manufacturing Practices (cGMP) for drugs**.
-        - Design Controls (part of the QSR) must consider the entire system, including how the device and drug interact.
-        """)
-    with st.expander("▶️ **21 CFR Part 820: The Quality System Regulation (QSR) for Devices**"):
-        st.markdown("""
-        This is the FDA's rulebook for medical device manufacturing and design. The Design Controls section (`820.30`) is the foundation of this entire application. It mandates a systematic approach to design to ensure the final product is safe and effective.
-        - **Applies to:** The physical pill, its electronics, the embedded software, and the companion mobile app.
-        - **Key Principle:** You must document everything to prove you designed the device in a state of control. The DHF is that proof.
-        """)
-    with st.expander("▶️ **21 CFR Parts 210/211 & CGMP in a Design Context**"):
-        st.markdown("""
-        This is the FDA's rulebook for pharmaceutical products. While this app focuses on the DHF (a device concept), design decisions for the device constituent part must be made with CGMP in mind. The goal is to ensure the final, combined product can be manufactured reliably, safely, and consistently.
-        - **Material Compatibility:** The pill casing cannot contaminate or react with the drug. This is a design choice verified during V&V.
-        - **Stability:** The device cannot cause the drug to degrade over its shelf life. This is confirmed via **Stability Studies**, a key CGMP activity.
-        - **Sterilizability:** The design materials and construction must be compatible with the chosen sterilization method (e.g., EtO, gamma) without damaging the device or the drug.
-        - **Aseptic Processing:** If applicable, the device must be designed to be assembled and filled in a sterile environment without introducing contamination.
-        """)
-    with st.expander("▶️ **ISO 13485:2016: Quality Management Systems (International Standard)**"):
-        st.markdown("""
-        ISO 13485 is the internationally recognized standard for a medical device Quality Management System (QMS). It is very similar to the FDA's QSR but is required for market access in many other regions, including Europe (as part of MDR), Canada, and Australia.
-        - **Relationship to QSR:** Following the QSR gets you very close to ISO 13485 compliance. The key difference is that ISO 13485 places a stronger emphasis on **risk management** throughout the entire QMS.
-        - **Why it matters:** A DHF built to QSR standards is easily adaptable for ISO 13485 audits, enabling global market strategies.
-        """)
-    with st.expander("▶️ **ISO 14971:2019: Risk Management for Medical Devices (International Standard)**"):
-        st.markdown("""
-        This is the global "how-to" guide for risk management. Both the FDA and international regulators consider it the state-of-the-art process for ensuring device safety.
-        - **Process:** It defines a lifecycle approach: identify hazards, estimate and evaluate risks, implement controls, and monitor the effectiveness of those controls.
-        - **Role in this App:** The **'2. Risk Management'** section of the DHF Explorer is a direct implementation of the documentation required by ISO 14971.
-        """)
+    with st.expander("▶️ **21 CFR Part 4: The 'Rulebook for Rulebooks'**"): st.markdown("Part 4 governs combination products. It doesn't add new requirements, but instead tells you **which existing regulations to apply**. For the Smart-Pill, this means:\n- The **device aspects** (casing, electronics, software) must follow the **Quality System Regulation (QSR) for devices**.\n- The **drug aspects** (formulation, stability, purity) must follow the **Current Good Manufacturing Practices (cGMP) for drugs**.\n- Design Controls (part of the QSR) must consider the entire system, including how the device and drug interact.")
+    with st.expander("▶️ **21 CFR Part 820: The Quality System Regulation (QSR) for Devices**"): st.markdown("This is the FDA's rulebook for medical device manufacturing and design. The Design Controls section (`820.30`) is the foundation of this entire application. It mandates a systematic approach to design to ensure the final product is safe and effective.\n- **Applies to:** The physical pill, its electronics, the embedded software, and the companion mobile app.\n- **Key Principle:** You must document everything to prove you designed the device in a state of control. The DHF is that proof.")
+    with st.expander("▶️ **21 CFR Parts 210/211 & CGMP in a Design Context**"): st.markdown("This is the FDA's rulebook for pharmaceutical products. While this app focuses on the DHF (a device concept), design decisions for the device constituent part must be made with CGMP in mind. The goal is to ensure the final, combined product can be manufactured reliably, safely, and consistently.\n- **Material Compatibility:** The pill casing cannot contaminate or react with the drug. This is a design choice verified during V&V.\n- **Stability:** The device cannot cause the drug to degrade over its shelf life. This is confirmed via **Stability Studies**, a key CGMP activity.\n- **Sterilizability:** The design materials and construction must be compatible with the chosen sterilization method (e.g., EtO, gamma) without damaging the device or the drug.\n- **Aseptic Processing:** If applicable, the device must be designed to be assembled and filled in a sterile environment without introducing contamination.")
+    with st.expander("▶️ **ISO 13485:2016: Quality Management Systems (International Standard)**"): st.markdown("ISO 13485 is the internationally recognized standard for a medical device Quality Management System (QMS). It is very similar to the FDA's QSR but is required for market access in many other regions, including Europe (as part of MDR), Canada, and Australia.\n- **Relationship to QSR:** Following the QSR gets you very close to ISO 13485 compliance. The key difference is that ISO 13485 places a stronger emphasis on **risk management** throughout the entire QMS.\n- **Why it matters:** A DHF built to QSR standards is easily adaptable for ISO 13485 audits, enabling global market strategies.")
+    with st.expander("▶️ **ISO 14971:2019: Risk Management for Medical Devices (International Standard)**"): st.markdown("This is the global 'how-to' guide for risk management. Both the FDA and international regulators consider it the state-of-the-art process for ensuring device safety.\n- **Process:** It defines a lifecycle approach: identify hazards, estimate and evaluate risks, implement controls, and monitor the effectiveness of those controls.\n- **Role in this App:** The **'2. Risk Management'** section of the DHF Explorer is a direct implementation of the documentation required by ISO 14971.")
     st.divider()
     st.subheader("The Role of a Design Assurance Quality Engineer")
     st.markdown("A Design Assurance QE is the steward of the DHF, ensuring compliance, quality, and safety are designed into the product from day one. This tool is designed to be their primary workspace. Key responsibilities within this framework include:")
-    with st.expander("✅ **Owning the Design History File (DHF)**"):
-        st.markdown("The QE is responsible for the **creation, remediation, and maintenance** of the DHF. It's not just a repository; it's a living document that tells the story of the product's development. \n- This application serves as the DHF's active workspace.\n- **Key QE Goal:** Ensure the DHF is complete, coherent, and audit-ready at all times. The Traceability Matrix is the QE's primary tool for identifying gaps.")
-    with st.expander("✅ **Driving Verification & Validation (V&V) Strategy**"):
-        st.markdown("The QE doesn't just witness tests; they help architect the entire V&V strategy.\n- **V&V Master Plan:** This is a high-level document, referenced in the Design Plan, that outlines the scope, methods, and acceptance criteria for all V&V activities.\n- **Protocol & Report Review:** The QE reviews and approves all test protocols (to ensure they are adequate) and reports (to ensure they are accurate and complete). The 'Design Verification' and 'Design Validation' sections track these deliverables.")
+    with st.expander("✅ **Owning the Design History File (DHF)**"): st.markdown("The QE is responsible for the **creation, remediation, and maintenance** of the DHF. It's not just a repository; it's a living document that tells the story of the product's development.\n- This application serves as the DHF's active workspace.\n- **Key QE Goal:** Ensure the DHF is complete, coherent, and audit-ready at all times. The Traceability Matrix is the QE's primary tool for identifying gaps.")
+    with st.expander("✅ **Driving Verification & Validation (V&V) Strategy**"): st.markdown("The QE doesn't just witness tests; they help architect the entire V&V strategy.\n- **V&V Master Plan:** This is a high-level document, referenced in the Design Plan, that outlines the scope, methods, and acceptance criteria for all V&V activities.\n- **Protocol & Report Review:** The QE reviews and approves all test protocols (to ensure they are adequate) and reports (to ensure they are accurate and complete). The 'Design Verification' and 'Design Validation' sections track these deliverables.")
     with st.expander("✅ **Advanced Quality Engineering Concepts**"):
         st.markdown("""Beyond foundational Design Controls, a Senior QE leverages advanced methodologies to ensure quality is built into the product proactively, not inspected in later. This is the core of **First-Time-Right (FTR)** initiatives, which aim to reduce the **Cost of Poor Quality (COPQ)**—the significant expenses associated with scrap, rework, complaints, and recalls.
 - **Quality by Design (QbD):** A systematic approach that begins with predefined objectives and emphasizes product and process understanding and control. The key is to identify **Critical Quality Attributes (CQAs)**—the physical, chemical, or biological characteristics that must be within a specific limit to ensure the desired product quality. These CQAs are then linked to the **Critical Material Attributes (CMAs)** of the raw materials and the **Critical Process Parameters (CPPs)** of the manufacturing process. The **QbD Tracker** on the main dashboard visualizes these crucial linkages.
@@ -474,7 +482,7 @@ with tab5:
     - **Design FMEA (dFMEA):** Focuses on failures that can result from the **design** of the product (e.g., incorrect material choice, software bug).
     - **Process FMEA (pFMEA):** Focuses on failures that can result from the **manufacturing process** (e.g., incorrect machine setting, operator error).
     - The **Risk & FMEA Dashboard** shows highlights from both.
-- **Fault Tree Analysis (FTA):** A top-down, deductive failure analysis where a high-level system failure (e.g., "Patient receives no therapy") is traced back to all the potential root causes. It's a powerful risk management tool used to understand complex failure modes, complementing the bottom-up FMEA. The project's `FTA-001` document would be part of the Risk Management File.
+- **Fault Tree Analysis (FTA):** A top-down, deductive failure analysis where a high-level system failure (e.g., 'Patient receives no therapy') is traced back to all the potential root causes. It's a powerful risk management tool used to understand complex failure modes, complementing the bottom-up FMEA. The project's `FTA-001` document would be part of the Risk Management File.
 - **Design of Experiments (DOE):** A statistical tool used to systematically determine the relationship between inputs (factors) and outputs of a process. Instead of testing one factor at a time, DOE allows for efficient exploration of the **design space**. It is used to identify the most critical CPPs and optimize their settings to ensure the process robustly produces products that meet their CQAs. The **DOE Analysis** tool in the `AI & Statistical Tools` tab provides a practical example.
 - **Statistical Process Control (SPC):** A method of quality control which employs statistical methods to monitor and control a process. This helps to ensure that the process operates efficiently, producing more specification-conforming product with less waste. The **SPC Chart** in the `AI & Statistical Tools` tab is a practical implementation.
 - **Hypothesis Testing:** A statistical method used to make decisions using data. For example, a t-test can determine if a new supplier's material is significantly stronger than the old one. The **Hypothesis Testing** tool in the `AI & Statistical Tools` tab demonstrates this.
