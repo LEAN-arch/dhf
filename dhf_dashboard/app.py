@@ -17,7 +17,6 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 # --- IMPORTS FROM THE PROJECT PACKAGE ---
-# These are assumed to exist and be correct from previous steps.
 from dhf_dashboard.utils.session_state_manager import SessionStateManager
 from dhf_dashboard.utils.critical_path_utils import find_critical_path
 from dhf_dashboard.analytics.traceability_matrix import render_traceability_matrix
@@ -58,60 +57,100 @@ def render_design_plan(ssm):
 def render_risk_management(ssm):
     st.subheader("2. Risk Management File (RMF)")
     st.markdown("A summary of risk management activities as per ISO 14971.")
-    hazards_df = pd.DataFrame(ssm.get_data("risk_management_file", "hazards"))
+    hazards_data = ssm.get_data("risk_management_file", "hazards")
+    if not hazards_data:
+        st.warning("No hazards have been recorded.")
+        return
     st.write("**Identified Hazards:**")
-    st.dataframe(hazards_df, use_container_width=True)
+    st.dataframe(pd.DataFrame(hazards_data), use_container_width=True)
 
 def render_human_factors(ssm):
     st.subheader("3. Human Factors & Usability Engineering")
-    st.warning("This is a placeholder page for Human Factors Engineering content (IEC 62366).")
+    st.markdown("This section details use-related risk analysis and usability studies as per IEC 62366.")
+    hf_data = ssm.get_data("human_factors", "use_scenarios")
+    if not hf_data:
+        st.warning("No use scenarios have been recorded.")
+        return
+    st.write("**Use Scenarios:**")
+    st.dataframe(pd.DataFrame(hf_data), use_container_width=True)
 
 def render_design_inputs(ssm):
     st.subheader("4. Design Inputs")
     st.markdown("Design inputs are the physical and performance requirements of a device that are used as a basis for device design.")
-    requirements_df = pd.DataFrame(ssm.get_data("design_inputs", "requirements"))
+    req_data = ssm.get_data("design_inputs", "requirements")
+    if not req_data:
+        st.warning("No design input requirements have been recorded.")
+        return
     st.write("**Requirements List:**")
-    st.dataframe(requirements_df, use_container_width=True)
+    st.dataframe(pd.DataFrame(req_data), use_container_width=True)
 
 def render_design_outputs(ssm):
     st.subheader("5. Design Outputs")
-    st.markdown("Design outputs are the results of a design effort at each design phase.")
-    outputs_df = pd.DataFrame(ssm.get_data("design_outputs", "documents"))
+    st.markdown("Design outputs are the results of a design effort at each design phase. These are the documents and specifications that prove the design inputs were met.")
+    output_data = ssm.get_data("design_outputs", "documents")
+    if not output_data:
+        st.warning("No design output documents have been recorded.")
+        return
     st.write("**Output Documents & Specifications:**")
-    st.dataframe(outputs_df, use_container_width=True)
+    st.dataframe(pd.DataFrame(output_data), use_container_width=True)
 
 def render_design_reviews(ssm):
     st.subheader("6. Design Reviews & Gates")
-    st.markdown("Formal documented reviews of the design results.")
+    st.markdown("Formal documented reviews of the design results at key project milestones.")
     reviews = ssm.get_data("design_reviews", "reviews")
+    if not reviews:
+        st.warning("No design reviews have been recorded.")
+        return
     for i, review in enumerate(reviews):
-        with st.expander(f"**Review {i+1} - Date: {review.get('date')}**"):
+        with st.expander(f"**Review {review.get('id', i+1)} - Date: {review.get('date')}**"):
             st.write(f"**Attendees:** {review.get('attendees')}")
             st.write(f"**Notes:** {review.get('notes')}")
             st.write("**Action Items:**")
-            st.dataframe(review.get('action_items', []), use_container_width=True)
+            action_items = review.get('action_items', [])
+            if action_items:
+                st.dataframe(action_items, use_container_width=True)
+            else:
+                st.info("No action items for this review.")
 
 def render_design_verification(ssm):
     st.subheader("7. Design Verification")
-    st.markdown("Confirmation that specified requirements have been fulfilled. ('Did you build the device right?')")
-    tests_df = pd.DataFrame(ssm.get_data("design_verification", "tests"))
+    st.markdown("Confirmation by examination and provision of objective evidence that specified requirements have been fulfilled. ('Did you build the device right?')")
+    ver_data = ssm.get_data("design_verification", "tests")
+    if not ver_data:
+        st.warning("No design verification tests have been recorded.")
+        return
     st.write("**Verification Test Protocols:**")
-    st.dataframe(tests_df, use_container_width=True)
+    st.dataframe(pd.DataFrame(ver_data), use_container_width=True)
 
 def render_design_validation(ssm):
     st.subheader("8. Design Validation")
-    st.markdown("Confirmation that the device meets the user's needs. ('Did you build the right device?')")
-    st.warning("This is a placeholder page for Design Validation content.")
+    st.markdown("Confirmation by examination and provision of objective evidence that the particular requirements for a specific intended use can be consistently fulfilled. ('Did you build the right device?')")
+    val_data = ssm.get_data("design_validation", "studies")
+    if not val_data:
+        st.warning("No design validation studies have been recorded.")
+        return
+    st.write("**Validation Studies:**")
+    st.dataframe(pd.DataFrame(val_data), use_container_width=True)
 
 def render_design_transfer(ssm):
     st.subheader("9. Design Transfer")
-    st.markdown("The process of transferring the device design to manufacturing.")
-    st.warning("This is a placeholder page for Design Transfer activities.")
+    st.markdown("The process of transferring the device design to manufacturing to ensure it can be produced correctly and reliably.")
+    transfer_data = ssm.get_data("design_transfer", "activities")
+    if not transfer_data:
+        st.warning("No design transfer activities have been recorded.")
+        return
+    st.write("**Transfer Activities:**")
+    st.dataframe(pd.DataFrame(transfer_data), use_container_width=True)
 
 def render_design_changes(ssm):
     st.subheader("10. Design Changes")
-    st.markdown("Formal control and documentation of any changes to the design.")
-    st.warning("This is a placeholder page for Design Change Control records.")
+    st.markdown("Formal control and documentation of any changes to the design after the initial DHF is approved.")
+    changes_data = ssm.get_data("design_changes", "changes")
+    if not changes_data:
+        st.warning("No design changes have been recorded.")
+        return
+    st.write("**Design Change Records:**")
+    st.dataframe(pd.DataFrame(changes_data), use_container_width=True)
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(layout="wide", page_title="DHF Command Center", page_icon="🚀")
@@ -188,9 +227,10 @@ with tab3:
     st.header("The Design Control Process (V-Model)")
     v_model_image_path = os.path.join(current_dir, "v_model_diagram.png")
     if os.path.exists(v_model_image_path):
-        st.image(v_model_image_path, use_column_width=True)
+        # DEFINITIVE FIX: Replaced use_column_width with use_container_width
+        st.image(v_model_image_path, use_container_width=True)
     else:
-        st.error(f"Image Not Found: Please ensure `v_model_diagram.png` is in the `{current_dir}` directory.", icon="🚨")
+        st.error(f"Image Not Found: Ensure `v_model_diagram.png` is in the `{current_dir}` directory.", icon="🚨")
     
     st.markdown("---")
     st.subheader("Understanding the V-Model")
@@ -226,7 +266,6 @@ with tab3:
     - **Verification (Horizontal Arrows):** Answers the question, **"Are we building the product right?"** It is the process of confirming that a design output meets its specified input requirements (e.g., does the code correctly implement the detailed design?).
     - **Validation (Top-Level Arrow):** Answers the question, **"Are we building the right product?"** It is the process of confirming that the final, finished product meets the user's actual needs and its intended use.
     """)
-
 
 with tab4:
     st.header(f"DHF Section Details: {selection}")
