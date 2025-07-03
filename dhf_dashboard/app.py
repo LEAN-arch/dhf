@@ -48,6 +48,20 @@ st.title("🚀 DHF Command Center: Smart-Pill Combination Product")
 project_name = ssm.get_data("design_plan", "project_name")
 st.caption(f"Live monitoring, analytics, and compliance for **{project_name}**")
 
+# --- FIX: Define Sidebar Navigation at the Global Level ---
+# The sidebar should be independent of any specific tab.
+with st.sidebar:
+    st.header("DHF Section Navigation")
+    page_options = [
+        "1. Design Plan", "2. Risk Management File", "3. Human Factors", "4. Design Inputs", "5. Design Outputs",
+        "6. Design Reviews & Gates", "7. Design Verification", "8. Design Validation",
+        "9. Design Transfer", "10. Design Changes", "11. Project Task Editor"
+    ]
+    selection = st.radio("Go to Section:", page_options)
+
+    st.info("This sidebar allows you to navigate and edit the detailed content for each DHF section, which is displayed in the 'DHF Section Details' tab.")
+    st.warning("Ensure all data is saved before navigating away.")
+
 # --- Main Tabbed Interface ---
 tab1, tab2, tab3, tab4 = st.tabs([
     "📊 Project Dashboard", 
@@ -75,16 +89,20 @@ with tab1:
     col2.metric("High-Risk Hazards Identified", f"{high_risks}")
 
     actions = []
-    for review in ssm.get_data("design_reviews", "reviews"):
-        actions.extend(review.get("action_items", []))
+    reviews_data = ssm.get_data("design_reviews", "reviews")
+    if reviews_data:
+        for review in reviews_data:
+            actions.extend(review.get("action_items", []))
     open_actions = len([a for a in actions if a.get('status') != 'Completed'])
     col3.metric("Open Action Items", f"{open_actions}")
     
     inputs_df = pd.DataFrame(ssm.get_data("design_inputs", "requirements"))
     outputs_df = pd.DataFrame(ssm.get_data("design_outputs", "documents"))
     traced_inputs = 0
-    if not inputs_df.empty and not outputs_df.empty and 'linked_input_id' in outputs_df.columns:
-        traced_inputs = inputs_df['id'].isin(outputs_df['linked_input_id']).sum()
+    if not inputs_df.empty and not outputs_df.empty and 'linked_input_id' in outputs_df.columns and 'id' in inputs_df.columns:
+        # Ensure we handle empty or malformed linked_input_id
+        linked_ids = outputs_df['linked_input_id'].dropna().unique()
+        traced_inputs = inputs_df['id'].isin(linked_ids).sum()
     coverage = (traced_inputs / len(inputs_df)) * 100 if not inputs_df.empty else 0
     col4.metric("Input→Output Trace Coverage", f"{coverage:.1f}%", help="Percentage of design inputs that have at least one design output linked to them.")
 
@@ -125,23 +143,13 @@ with tab3:
     """)
 
 # ======================================================================================
-# --- TAB 4: DHF SECTION DETAILS & SIDEBAR NAVIGATION ---
+# --- TAB 4: DHF SECTION DETAILS ---
 # ======================================================================================
+# The content for this tab is now controlled by the global sidebar selection.
 with tab4:
-    st.header("Data Entry for DHF & RMF Sections")
-    st.info("Select a DHF section from the sidebar to view or edit its contents. Changes made here will be reflected across the entire dashboard.")
-    
-    with st.sidebar:
-        st.header("DHF Section Navigation")
-        page_options = [
-            "1. Design Plan", "2. Risk Management File", "3. Human Factors", "4. Design Inputs", "5. Design Outputs",
-            "6. Design Reviews & Gates", "7. Design Verification", "8. Design Validation",
-            "9. Design Transfer", "10. Design Changes", "11. Project Task Editor"
-        ]
-        selection = st.radio("Go to Section:", page_options)
-
-        st.info("...") # Sidebar info box
-        st.warning("...") # Sidebar warning box
+    st.header(f"DHF Section Details: {selection}")
+    st.info("Use the sidebar to navigate between DHF sections. Changes made here will be reflected across the entire dashboard.")
+    st.divider()
 
     PAGES = {
         "1. Design Plan": design_plan,
@@ -157,18 +165,16 @@ with tab4:
     }
     
     if selection == "11. Project Task Editor":
-        st.subheader("11. Project Timeline and Task Editor")
+        st.subheader("Project Timeline and Task Editor")
         st.warning("Directly edit project timelines, statuses, and dependencies.")
         tasks_list = ssm.get_data("project_management", "tasks")
-        edited_tasks = st.data_editor(tasks_list, num_rows="dynamic", use_container_width=True)
+        # Use a unique key for the data_editor in this context
+        edited_tasks = st.data_editor(tasks_list, key="main_task_editor", num_rows="dynamic", use_container_width=True)
         if edited_tasks != tasks_list:
             ssm.update_data(edited_tasks, "project_management", "tasks")
             st.success("Project tasks updated!")
             st.rerun()
     else:
-        # ------------------- FIX IS HERE -------------------
-        # The redundant second call to page_module.render(ssm) has been removed.
+        # This logic now correctly renders the selected page inside tab4
         page_module = PAGES[selection]
-        # Call the 'render' function within that module
         page_module.render(ssm)
-        # ----------------- END OF FIX ------------------
