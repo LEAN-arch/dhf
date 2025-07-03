@@ -1,7 +1,7 @@
 # File: dhf_dashboard/utils/session_state_manager.py
-# SME Note: This is the definitive, fully populated data model. It names
-# JOSE BAUTISTA as the main Quality Lead and assigns relevant tasks and
-# responsibilities to him for a personalized experience.
+# SME Note: This is the definitive, fully populated data model. It makes a specific
+# adjustment to ensure the Quality Lead, JOSE BAUTISTA, has no overdue tasks,
+# while preserving the "Overdue" functionality for other team members.
 
 import streamlit as st
 from datetime import date, timedelta
@@ -12,8 +12,8 @@ class SessionStateManager:
     professional-grade Design Assurance dashboard.
     """
     def __init__(self):
-        # Incrementing version to 15 to load the personalized data.
-        CURRENT_DATA_VERSION = 15
+        # Incrementing version to 16 to load the personalized data.
+        CURRENT_DATA_VERSION = 16
 
         if ('dhf_data' not in st.session_state or
             st.session_state.dhf_data.get('data_version') != CURRENT_DATA_VERSION):
@@ -30,10 +30,10 @@ class SessionStateManager:
                     "scope": "This project covers the design and development of a new combination product, the 'Smart-Pill', intended for the targeted oral delivery of drug XYZ for treating chronic condition ABC. The system comprises a swallowable electronic capsule (device) containing a payload of drug XYZ (drug), a companion mobile application for monitoring, and a cloud-based data backend.",
                     "team_members": [
                         {"role": "Project Lead", "name": "Dr. Alice Weber", "responsibility": "Overall project oversight and final DHF approval."},
-                        {"role": "Senior Device Engineer", "name": "Bob Chen", "responsibility": "Hardware design, material selection, and mechanical testing."},
+                        {"role": "Device Engineer", "name": "Bob Chen", "responsibility": "Hardware design, material selection, and mechanical testing."},
                         {"role": "Software Engineer", "name": "Charlie Day", "responsibility": "Embedded firmware, mobile app development, and cybersecurity."},
-                        {"role": "Pharma Scientist", "name": "Dr. Diana Evans", "responsibility": "Drug formulation, stability studies, and release profile analysis."},
-                        {"role": "Sr. Quality Engineer Lead", "name": "JOSE BAUTISTA", "responsibility": "DHF owner, V&V strategy, Risk Management, and regulatory compliance."}
+                        {"role": "Pharma Scientist", "name": "Diana Evans", "responsibility": "Drug formulation, stability studies, and release profile analysis."},
+                        {"role": "Quality Lead", "name": "JOSE BAUTISTA", "responsibility": "DHF owner, V&V strategy, Risk Management, and regulatory compliance."}
                     ],
                 },
                 "risk_management_file": {
@@ -84,9 +84,11 @@ class SessionStateManager:
                         {"date": date(2024, 5, 10), "attendees": "A. Weber, B. Chen, JOSE BAUTISTA, C. Day, D. Evans", "notes": "Phase 1 Gate Review completed. Approved to proceed to detailed design. Key action items on material sourcing and software architecture.", "is_gate_review": True,
                          "action_items": [
                             {"id": "AI-DR1-01", "description": "Finalize biocompatible polymer selection from approved supplier list.", "owner": "B. Chen", "due_date": date(2024, 5, 24), "status": "Completed"},
-                            {"id": "AI-DR1-02", "description": "Update Risk Management File with outputs from this review.", "owner": "JOSE BAUTISTA", "due_date": current_date - timedelta(days=20), "status": "In Progress"},
+                            # --- FIX IS HERE: Changed due date to be in the future ---
+                            {"id": "AI-DR1-02", "description": "Update Risk Management File with outputs from this review.", "owner": "JOSE BAUTISTA", "due_date": current_date + timedelta(days=5), "status": "In Progress"},
                             {"id": "AI-DR1-03", "description": "Create detailed CAD models for manufacturing molds.", "owner": "B. Chen", "due_date": current_date + timedelta(days=30), "status": "In Progress"},
                             {"id": "AI-DR1-04", "description": "Develop initial firmware for Bluetooth communication handshake.", "owner": "C. Day", "due_date": current_date + timedelta(days=45), "status": "Open"},
+                            # This item remains overdue to demonstrate functionality
                             {"id": "AI-DR1-05", "description": "Finalize drug stability protocol for combination testing.", "owner": "D. Evans", "due_date": current_date - timedelta(days=10), "status": "Open"},
                             {"id": "AI-DR1-06", "description": "Draft V&V Master Plan.", "owner": "JOSE BAUTISTA", "due_date": current_date + timedelta(days=15), "status": "In Progress"}
                         ]}
