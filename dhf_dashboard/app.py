@@ -1,7 +1,7 @@
 # File: dhf_dashboard/app.py
-# SME Note: This is the definitive, fully enhanced version. It adds new dashboard sections
-# for CGMP Readiness, QbD, and FMEA, and integrates all advanced QE concepts
-# into the Design Controls Guide.
+# SME Note: This is the definitive, all-inclusive, and untruncated version. It includes the robust
+# path correction block, the professional-grade QE dashboard with the optimal "Risk Mitigation Flow"
+# visualization, all educational content in its full unabridged form, and all bug fixes and feature enhancements.
 
 import sys
 import os
@@ -12,6 +12,9 @@ import plotly.express as px
 import numpy as np
 
 # --- ROBUST PATH CORRECTION BLOCK ---
+# This is the definitive fix for the ModuleNotFoundError.
+# It finds the project's root directory (the one containing 'dhf_dashboard')
+# and adds it to Python's search path.
 try:
     current_file_path = os.path.abspath(__file__)
     current_dir = os.path.dirname(current_file_path)
@@ -284,7 +287,17 @@ with tab1:
             yaxis_categoryorder='array', yaxis_categoryarray=tasks_df_processed.sort_values("start_date", ascending=False)["name"].tolist()
         )
         st.plotly_chart(gantt_fig, use_container_width=True)
-        legend_html = """...""" # Legend HTML remains the same
+        legend_html = """
+        <div style="padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin-top: 15px; font-size: 0.9em;">
+        <b>Legend:</b>
+        <ul style="list-style-type: none; padding-left: 0; margin-top: 5px; column-count: 2;">
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#2ca02c; margin-right: 8px; vertical-align: middle;"></span> Completed</li>
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#1f77b4; margin-right: 8px; vertical-align: middle;"></span> In Progress</li>
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#d62728; margin-right: 8px; vertical-align: middle;"></span> At Risk</li>
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#7f7f7f; margin-right: 8px; vertical-align: middle;"></span> Not Started</li>
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:11px; height:11px; border: 2px solid red; margin-right: 8px; vertical-align: middle;"></span> Task on Critical Path</li>
+        </ul></div>
+        """
         st.markdown(legend_html, unsafe_allow_html=True)
 
 # ==============================================================================
@@ -412,7 +425,7 @@ with tab4:
     st.divider()
 
     st.subheader("Visualizing the Process: The V-Model")
-    st.markdown("The V-Model is a powerful way to visualize the Design Controls process...")
+    st.markdown("The V-Model is a powerful way to visualize the Design Controls process, emphasizing the critical link between design (left side) and testing (right side).")
 
     v_model_image_path = os.path.join(os.path.dirname(__file__), "v_model_diagram.png")
     if os.path.exists(v_model_image_path):
@@ -426,21 +439,23 @@ with tab4:
     with col1:
         st.subheader("Left Side: Decomposition & Design")
         st.markdown("""
-        - **User Needs & Intended Use:** ...
-        - **Design Inputs (Requirements):** ...
-        - **System & Architectural Design:** ...
-        - **Detailed Design (Outputs):** ...
+        Moving down the left side of the 'V' involves breaking down the high-level concept into detailed, buildable specifications.
+        - **User Needs & Intended Use:** What problem does the user need to solve?
+        - **Design Inputs (Requirements):** How must the device perform to meet those needs? This includes technical, functional, and safety requirements.
+        - **System & Architectural Design:** How will the components be structured to meet the requirements?
+        - **Detailed Design (Outputs):** At the lowest level, these are the final drawings, code, and specifications that are used to build the device.
         """)
     with col2:
         st.subheader("Right Side: Integration & Testing")
         st.markdown("""
-        - **Unit/Component Verification:** ...
-        - **Integration & System Verification:** ...
-        - **Design Validation:** ...
+        Moving up the right side of the 'V' involves building the device from its components and testing at each level to ensure it matches the corresponding design phase on the left.
+        - **Unit/Component Verification:** Does each individual part meet its detailed design specification?
+        - **Integration & System Verification:** Do the assembled parts work together as defined in the architectural design?
+        - **Design Validation:** Does the final, complete device meet the high-level User Needs? This is the ultimate test.
         """)
 
     st.success("""
     #### The Core Principle: Verification vs. Validation
-    - **Verification (Horizontal Arrows):** ...
-    - **Validation (Top-Level Arrow):** ...
+    - **Verification (Horizontal Arrows):** Answers the question, **"Are we building the product right?"** It is the process of confirming that a design output meets its specified input requirements (e.g., does the code correctly implement the detailed design?).
+    - **Validation (Top-Level Arrow):** Answers the question, **"Are we building the right product?"** It is the process of confirming that the final, finished product meets the user's actual needs and its intended use.
     """)
