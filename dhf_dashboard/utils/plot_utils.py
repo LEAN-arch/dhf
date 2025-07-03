@@ -4,14 +4,13 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 
+# ... (other plotting functions are unchanged) ...
 def create_progress_donut(completion_pct: float):
-    # This function is fine and remains unchanged.
     fig = go.Figure(go.Indicator(mode="gauge+number", value=completion_pct, title={'text': "<b>Overall Project Progress</b>"}, number={'suffix': "%"}, gauge={'axis': {'range': [None, 100]},'bar': {'color': "#2ca02c"}}))
     fig.update_layout(height=250, margin=dict(l=10, r=10, t=50, b=10))
     return fig
 
 def create_risk_profile_chart(hazards_df: pd.DataFrame):
-    # This function is fine and remains unchanged.
     if hazards_df.empty: return go.Figure(layout_title_text="<b>Risk Profile</b>")
     risk_levels = ['Low', 'Medium', 'High']
     initial_counts = hazards_df['initial_risk'].value_counts().reindex(risk_levels, fill_value=0)
@@ -21,7 +20,6 @@ def create_risk_profile_chart(hazards_df: pd.DataFrame):
     return fig
 
 def create_action_item_chart(actions_df: pd.DataFrame):
-    # This function is fine and remains unchanged.
     if actions_df.empty: return go.Figure(layout_title_text="<b>Action Items</b>")
     open_items_df = actions_df[actions_df['status'] != 'Completed']
     if open_items_df.empty: return go.Figure(layout_title_text="<b>No Open Action Items</b>")
@@ -29,13 +27,13 @@ def create_action_item_chart(actions_df: pd.DataFrame):
     fig = px.bar(workload, title="<b>Open Action Items by Owner & Status</b>")
     fig.update_layout(barmode='stack', title_x=0.5)
     return fig
+# --- END of unchanged functions ---
 
-# SME NOTE: The old Gantt chart function has been deleted and replaced with this simpler, more robust version.
-# It no longer performs complex overlays. Instead, it expects a pre-processed DataFrame with color and border information.
 def create_gantt_chart(tasks_df: pd.DataFrame):
     """
     Creates an interactive Gantt chart from a pre-processed DataFrame.
-    The DataFrame must contain 'start_date', 'end_date', 'name', 'color', 'line', and 'display_text' columns.
+    The DataFrame must contain 'start_date', 'end_date', 'name', 'color', 
+    'line_color', 'line_width', and 'display_text' columns.
     """
     if tasks_df.empty:
         return go.Figure()
@@ -45,27 +43,25 @@ def create_gantt_chart(tasks_df: pd.DataFrame):
         x_start="start_date",
         x_end="end_date",
         y="name",
-        color="color", # Use the pre-calculated color column
+        color="color",
         title="<b>Project Timeline and Critical Path</b>",
-        # Use the explicit colors from the DataFrame
-        color_discrete_map="identity" 
+        color_discrete_map="identity"
     )
 
-    # Update the traces with pre-calculated border and text info
+    # --- FIX IS HERE: Use the correct properties for marker line styling ---
     fig.update_traces(
         text=tasks_df['display_text'],
         textposition='inside',
-        marker_line=tasks_df['line'].to_list() # Use the pre-calculated line column
+        marker_line_color=tasks_df['line_color'], # Correct property for line color
+        marker_line_width=tasks_df['line_width']  # Correct property for line width
     )
+    # --- END OF FIX ---
     
-    # Standard layout updates
     fig.update_layout(
-        showlegend=False, # Legend is redundant now
+        showlegend=False,
         title_x=0.5,
         xaxis_title="Date",
         yaxis_title="DHF Phase",
-        font=dict(family="Arial, sans-serif", size=12),
-        # Sort tasks top-to-bottom by start date
         yaxis_categoryorder='array',
         yaxis_categoryarray=tasks_df.sort_values("start_date", ascending=False)["name"].tolist()
     )
