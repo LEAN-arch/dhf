@@ -1,7 +1,7 @@
 # File: dhf_dashboard/app.py
-# SME Note: This is a single, self-contained, and robust file consolidating all necessary logic.
+# SME Note: This is the definitive, fully functional version consolidating all fixes.
 
-# --- ENVIRONMENT AND PATH CORRECTION (Failsafe) ---
+# --- ENVIRONMENT AND PATH CORRECTION ---
 import sys
 import os
 import pandas as pd
@@ -16,39 +16,15 @@ parent_dir = os.path.dirname(current_dir)
 if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
-# --- UTILITY AND PLOTTING FUNCTIONS (Consolidated for Robustness) ---
+# --- IMPORTS FROM THE PROJECT PACKAGE ---
 from dhf_dashboard.utils.session_state_manager import SessionStateManager
+from dhf_dashboard.utils.plot_utils import create_gantt_chart, create_progress_donut, create_risk_profile_chart, create_action_item_chart
+from dhf_dashboard.utils.critical_path_utils import find_critical_path
+from dhf_dashboard.analytics.traceability_matrix import render_traceability_matrix
+from dhf_dashboard.analytics.action_item_tracker import render_action_item_tracker
 
-def find_critical_path(tasks_df: pd.DataFrame):
-    if tasks_df.empty: return []
-    tasks_df['start_date'] = pd.to_datetime(tasks_df['start_date'])
-    tasks_df['end_date'] = pd.to_datetime(tasks_df['end_date'])
-    task_map = tasks_df.set_index('id').to_dict('index')
-    paths = {task_id: task['end_date'] for task_id, task in task_map.items()}
-    if not paths: return []
-    last_task_id = max(paths, key=paths.get)
-    critical_path = []
-    current_task_id = last_task_id
-    while current_task_id:
-        critical_path.insert(0, current_task_id)
-        task_info = task_map.get(current_task_id)
-        if not task_info or pd.isna(task_info.get('dependencies')) or not task_info.get('dependencies'): break
-        dep_ids = str(task_info.get('dependencies', '')).replace(' ', '').split(',')
-        latest_dep_id = None
-        latest_dep_end = pd.Timestamp.min
-        for dep_id in dep_ids:
-            if dep_id in task_map and task_map[dep_id]['end_date'] > latest_dep_end:
-                latest_dep_end = task_map[dep_id]['end_date']
-                latest_dep_id = dep_id
-        current_task_id = latest_dep_id
-    return critical_path
-
-def create_gantt_chart(tasks_df: pd.DataFrame):
-    if tasks_df.empty: return go.Figure()
-    fig = px.timeline(tasks_df, x_start="start_date", x_end="end_date", y="name", color="color", color_discrete_map="identity")
-    fig.update_traces(text=tasks_df['display_text'], textposition='inside', marker_line_color=tasks_df['line_color'], marker_line_width=tasks_df['line_width'])
-    fig.update_layout(showlegend=False, title_x=0.5, xaxis_title="Date", yaxis_title="DHF Phase", yaxis_categoryorder='array', yaxis_categoryarray=tasks_df.sort_values("start_date", ascending=False)["name"].tolist())
-    return fig
+# Import all section rendering modules
+from dhf_dashboard.dhf_sections import design_plan, design_risk_management, human_factors, design_inputs, design_outputs, design_reviews, design_verification, design_validation, design_transfer, design_changes
 
 # --- PAGE CONFIGURATION ---
 st.set_page_config(layout="wide", page_title="DHF Command Center", page_icon="🚀")
@@ -58,6 +34,7 @@ ssm = SessionStateManager()
 
 # --- SME ARCHITECTURE: CRASH-PROOF DATA PIPELINE ---
 try:
+    # --- TASKS DATA ---
     tasks_df = pd.DataFrame(ssm.get_data("project_management", "tasks"))
     if not tasks_df.empty:
         tasks_df['start_date'] = pd.to_datetime(tasks_df['start_date'], errors='coerce')
@@ -71,26 +48,48 @@ try:
         tasks_df['line_color'] = tasks_df.apply(lambda row: 'red' if row['is_critical'] else row['color'], axis=1)
         tasks_df['line_width'] = tasks_df.apply(lambda row: 4 if row['is_critical'] else 1, axis=1)
         tasks_df['display_text'] = tasks_df.apply(lambda row: f"<b>{row['name']}</b> ({row.get('completion_pct', 0)}%)", axis=1)
+    
+    # --- OTHER DATA ---
+    all_actions = []
+    reviews_data = ssm.get_data("design_reviews", "reviews")
+    if reviews_data:
+        for review in reviews_data:
+            all_actions.extend(review.get("action_items", []))
+    actions_df = pd.DataFrame(all_actions)
 
 except Exception as e:
-    st.error(f"FATAL ERROR preparing Gantt Chart data: {e}", icon="🚨")
-    tasks_df = pd.DataFrame() # Ensure tasks_df is an empty DataFrame on failure
+    st.error(f"A FATAL ERROR occurred during data preparation: {e}", icon="🚨")
+    st.info("The dashboard cannot be displayed. Please check the mock data source.")
+    st.stop()
+# --- END OF DATA PIPELINE ---
 
-# --- Main App ---
+# --- MAIN APP UI ---
 st.title("🚀 DHF Command Center")
 st.caption(f"Live monitoring for **{ssm.get_data('design_plan', 'project_name')}**")
 
-# --- All tabs are created here ---
+with st.sidebar:
+    st.header("DHF Section Navigation")
+    page_options = ["1. Design Plan", "2. Risk Management File", "3. Human Factors", "4. Design Inputs", "5. Design Outputs", "6. Design Reviews & Gates", "7. Design Verification", "8. Design Validation", "9. Design Transfer", "10. Design Changes", "11. Project Task Editor"]
+    selection = st.radio("Go to Section:", page_options, key="sidebar_selection")
+    st.info("Select a section to view or edit its contents in the 'DHF Section Details' tab.")
+
 tab1, tab2, tab3, tab4 = st.tabs(["📊 Project Dashboard", "📈 Advanced Analytics", "📜 DHF Structure (V-Model)", "🗂️ DHF Section Details"])
 
-# --- TAB 1: PROJECT DASHBOARD ---
 with tab1:
+    st.header("Project Health & KPIs")
+    col1, col2 = st.columns(2)
+    with col1:
+        completion_pct = tasks_df['completion_pct'].mean() if not tasks_df.empty and 'completion_pct' in tasks_df.columns else 0
+        st.plotly_chart(create_progress_donut(completion_pct), use_container_width=True)
+    with col2:
+        st.plotly_chart(create_risk_profile_chart(pd.DataFrame(ssm.get_data("risk_management_file", "hazards"))), use_container_width=True)
+
+    st.divider()
     st.header("Project Timeline and Critical Path")
     if not tasks_df.empty:
         gantt_fig = create_gantt_chart(tasks_df)
         st.plotly_chart(gantt_fig, use_container_width=True)
-
-        # DEFINITIVE FIX: Custom HTML legend for clarity and robustness
+        # Custom HTML legend
         legend_html = """
         <div style="padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin-top: 15px;">
         <b>Legend:</b>
@@ -105,31 +104,65 @@ with tab1:
         """
         st.markdown(legend_html, unsafe_allow_html=True)
     else:
-        st.warning("No project tasks found or an error occurred while loading them.")
-        st.info("Check the data source in `session_state_manager.py` or the `Project Task Editor` in Tab 4.")
+        st.warning("No project tasks found.")
 
-# --- TAB 2: ADVANCED ANALYTICS ---
 with tab2:
-    st.header("Analytics placeholder")
-    st.info("Advanced analytics such as the Traceability Matrix and Action Item Tracker will be here.")
+    st.header("Compliance & Execution Analytics")
+    render_traceability_matrix(ssm)
 
-# --- TAB 3: V-MODEL (This will now render) ---
 with tab3:
     st.header("The Design Control Process (V-Model)")
-    # Using a robust path construction and error handling
     v_model_image_path = os.path.join(current_dir, "v_model_diagram.png")
     if os.path.exists(v_model_image_path):
-        st.image(v_model_image_path, caption="The V-Model for system development, illustrating the relationship between design and testing phases.")
+        st.image(v_model_image_path, caption="The V-Model for system development.")
     else:
-        st.error(f"V-Model Image Not Found: Please ensure `v_model_diagram.png` is in the `{current_dir}` directory.", icon="🚨")
-    
-    st.markdown("""
-    The **V-Model** is a graphical representation of the systems development lifecycle. It highlights the relationships between each phase of development and its associated testing phase.
-    - **Verification:** The horizontal arrows represent verification activities (e.g., code reviews, design reviews), answering the question: "Are we building the product right?"
-    - **Validation:** The top-level arrow represents validation, answering the question: "Are we building the right product?"
-    """)
+        st.error(f"Image Not Found: Ensure `v_model_diagram.png` is in the `{current_dir}` directory.", icon="🚨")
+    st.markdown("The **V-Model** illustrates the lifecycle of a development project...")
 
-# --- TAB 4: DHF SECTION DETAILS ---
+# --- DEFINITIVE FIX: Restored Page Navigation Logic ---
 with tab4:
-    st.header("DHF Section Editor")
-    st.info("This section allows editing of all DHF components, including project tasks.")
+    st.header(f"DHF Section Details: {selection}")
+    st.divider()
+
+    PAGES = {
+        "1. Design Plan": design_plan,
+        "2. Risk Management File": design_risk_management,
+        "3. Human Factors": human_factors,
+        "4. Design Inputs": design_inputs,
+        "5. Design Outputs": design_outputs,
+        "6. Design Reviews & Gates": design_reviews,
+        "7. Design Verification": design_verification,
+        "8. Design Validation": design_validation,
+        "9. Design Transfer": design_transfer,
+        "10. Design Changes": design_changes,
+    }
+
+    if selection == "11. Project Task Editor":
+        st.subheader("Project Timeline and Task Editor")
+        st.warning("Directly edit project timelines, statuses, and dependencies.")
+        
+        # Hide internal helper columns from the user editor
+        columns_to_hide = ['color', 'is_critical', 'line_color', 'line_width', 'display_text']
+        columns_to_show = [col for col in tasks_df.columns if col not in columns_to_hide]
+        
+        # Present the clean dataframe to the user
+        edited_df = st.data_editor(
+            tasks_df[columns_to_show], 
+            key="main_task_editor", 
+            num_rows="dynamic", 
+            use_container_width=True,
+            column_config={
+                "start_date": st.column_config.DateColumn("Start Date", format="YYYY-MM-DD"),
+                "end_date": st.column_config.DateColumn("End Date", format="YYYY-MM-DD")
+            }
+        )
+        
+        # Compare the edited data back to the original subset of columns
+        if not edited_df.equals(tasks_df[columns_to_show]):
+            ssm.update_data(edited_df.to_dict('records'), "project_management", "tasks")
+            st.success("Project tasks updated! Rerunning...")
+            st.rerun()
+    else:
+        # Call the render function from the selected module
+        page_module = PAGES[selection]
+        page_module.render(ssm)
