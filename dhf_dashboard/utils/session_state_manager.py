@@ -1,6 +1,7 @@
 # File: dhf_dashboard/utils/session_state_manager.py
-# SME Note: This version is significantly enhanced to power the new professional-grade dashboard.
-# It includes statuses, sign-offs, risk detection scores for RPN, and a new quality_system section for CAPAs.
+# SME Note: This version corrects the data model regression by re-introducing the
+# 'linked_input_id' key to the design_outputs section, which is critical for the
+# Traceability Matrix to function correctly.
 
 import streamlit as st
 from datetime import date, timedelta
@@ -11,12 +12,15 @@ class SessionStateManager:
     professional-grade Design Assurance dashboard.
     """
     def __init__(self):
-        CURRENT_DATA_VERSION = 6 # Version incremented for the new data model
+        # The version number is not incremented here as it's a bug fix, not a new model.
+        # However, if users already have a broken state, incrementing to 7 would force a clean refresh.
+        # For a clean environment, 6 is fine. Let's increment to be safe.
+        CURRENT_DATA_VERSION = 7
 
         if ('dhf_data' not in st.session_state or
             st.session_state.dhf_data.get('data_version') != CURRENT_DATA_VERSION):
 
-            st.toast(f"QE Upgrade: Initializing professional mock data (v{CURRENT_DATA_VERSION})...")
+            st.toast(f"Data Fix: Initializing corrected mock data (v{CURRENT_DATA_VERSION})...")
 
             base_date = date(2024, 1, 15)
 
@@ -58,12 +62,13 @@ class SessionStateManager:
                 },
                 "design_outputs": {
                     "documents": [
-                        {"id": "DO-001", "title": "User Needs Document", "phase": "User Needs", "status": "Approved"},
-                        {"id": "DO-002", "title": "System Requirements Spec", "phase": "Design Inputs", "status": "Approved"},
-                        {"id": "DO-003", "title": "Risk Management Plan", "phase": "Design Inputs", "status": "Approved"},
-                        {"id": "DO-004", "title": "Pill Casing Final CAD Model", "phase": "Design Outputs", "status": "In Review"},
-                        {"id": "DO-005", "title": "Dose Release Mechanism Spec", "phase": "Design Outputs", "status": "Draft"},
-                        {"id": "DO-006", "title": "Biocompatibility Test Protocol", "phase": "V&V", "status": "Draft"},
+                        # --- FIX IS HERE: The 'linked_input_id' key has been restored to each document ---
+                        {"id": "DO-001", "title": "User Needs Document", "phase": "User Needs", "status": "Approved", "linked_input_id": "UN-001"},
+                        {"id": "DO-002", "title": "System Requirements Spec", "phase": "Design Inputs", "status": "Approved", "linked_input_id": "UN-001"},
+                        {"id": "DO-003", "title": "Risk Management Plan", "phase": "Design Inputs", "status": "Approved", "linked_input_id": "UN-001"},
+                        {"id": "DO-004", "title": "Pill Casing Final CAD Model", "phase": "Design Outputs", "status": "In Review", "linked_input_id": "SR-001"},
+                        {"id": "DO-005", "title": "Dose Release Mechanism Spec", "phase": "Design Outputs", "status": "Draft", "linked_input_id": "RC-001"},
+                        {"id": "DO-006", "title": "Biocompatibility Test Protocol", "phase": "V&V", "status": "Draft", "linked_input_id": "RC-002"},
                     ]
                 },
                 "design_verification": {
