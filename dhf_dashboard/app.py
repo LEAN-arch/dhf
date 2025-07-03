@@ -1,7 +1,8 @@
 # File: dhf_dashboard/app.py
-# SME Note: This is the definitive, all-inclusive version. It includes a robust
-# path correction block, a refined UI using tabs, and a new, comprehensive
-# "Design Controls Guide" tab to provide essential regulatory context.
+# SME Note: This is the definitive, professional-grade version. It includes the robust
+# path correction block, the refined UI, and a "Design Controls Guide" tab that is
+# now fully expanded with detailed information tailored to a Senior Design Assurance
+# Quality Engineer role, referencing key responsibilities like TMV and statistical rationale.
 
 import sys
 import os
@@ -74,7 +75,6 @@ st.title("🚀 DHF Command Center")
 project_name = ssm.get_data("design_plan", "project_name")
 st.caption(f"Live monitoring for the **{project_name}** project.")
 
-# UX SME Rationale: A tabbed interface provides a clean, high-level separation of concerns.
 tab1, tab2, tab3, tab4 = st.tabs([
     "📊 **Dashboard**",
     "🗂️ **DHF Explorer**",
@@ -126,7 +126,6 @@ with tab2:
     st.header("Design History File Explorer")
     st.markdown("Select a DHF section from the sidebar to view or edit its contents.")
 
-    # --- Sidebar for DHF Section Navigation ---
     with st.sidebar:
         st.header("DHF Section Navigation")
         PAGES = {
@@ -147,7 +146,6 @@ with tab2:
             key="sidebar_dhf_selection",
         )
 
-    # --- Render the selected DHF section editor ---
     st.divider()
     page_function = PAGES[dhf_selection]
     page_function(ssm)
@@ -180,33 +178,94 @@ with tab3:
             st.rerun()
 
 # ==============================================================================
-# TAB 4: DESIGN CONTROLS GUIDE (NEW CONTENT)
+# TAB 4: DESIGN CONTROLS GUIDE (FULLY EXPANDED)
 # ==============================================================================
 with tab4:
-    st.header("A Guide to Design Controls & the V-Model")
-    st.markdown("This section provides a high-level overview of the Design Controls methodology, a cornerstone of medical device development required by the FDA.")
+    st.header("A Guide to Design Controls & the Regulatory Landscape")
+    st.markdown("This section provides a high-level overview of the Design Controls methodology and the key regulations and standards governing medical device development.")
 
-    st.subheader("The Design Controls Process (21 CFR 820.30)")
-    st.markdown("""
-    Design Controls are a systematic process to ensure that a medical device is safe and effective for its intended use. It's not just about paperwork; it's a framework for quality-driven product development. The entire process is designed to create a **Design History File (DHF)**, which is the collection of documents that proves you followed the process. This application is a tool to build and manage that DHF.
-    """)
+    st.subheader("Navigating the Regulatory Maze for Combination Products")
+    st.info("A 'Combination Product' like the Smart-Pill contains both device and drug components, so it must comply with regulations for both.")
 
-    with st.expander("Expand to see how DHF sections map to FDA regulations"):
+    with st.expander("▶️ **21 CFR Part 4: The 'Rulebook for Rulebooks'**"):
         st.markdown("""
-        | DHF Section in this App      | Regulation (21 CFR 820.30) | Purpose                                                                 |
-        |------------------------------|----------------------------|-------------------------------------------------------------------------|
-        | **1. Design Plan**           | `(b) Design/Dev. Planning` | Outlines project scope, activities, team, and responsibilities.         |
-        | **2. Risk Management**       | `(g) Design Validation`    | Identifies, evaluates, and controls risks (as per ISO 14971).           |
-        | **3. Human Factors**         | `(c) Design Input`         | Ensures user needs and safe use are considered in the design.           |
-        | **4. Design Inputs**         | `(c) Design Input`         | Defines all requirements (user, technical, regulatory).                 |
-        | **5. Design Outputs**        | `(d) Design Output`        | The tangible results of design (drawings, specs) that meet inputs.      |
-        | **6. Design Reviews**        | `(e) Design Review`        | Formal checkpoints to review the design's progress and adequacy.        |
-        | **7. Design Verification**   | `(f) Design Verification`  | Confirms that design outputs meet the design inputs. *Built it right?*  |
-        | **8. Design Validation**     | `(g) Design Validation`    | Confirms the device meets user needs. *Built the right thing?*          |
-        | **9. Design Transfer**       | `(h) Design Transfer`      | Transfers the design to manufacturing for production.                   |
-        | **10. Design Changes**       | `(i) Design Changes`       | Formally controls any changes made after the design is approved.        |
+        Part 4 governs combination products. It doesn't add new requirements, but instead tells you **which existing regulations to apply**. For the Smart-Pill, this means:
+        - The **device aspects** (casing, electronics, software) must follow the **Quality System Regulation (QSR) for devices**.
+        - The **drug aspects** (formulation, stability, purity) must follow the **Current Good Manufacturing Practices (cGMP) for drugs**.
+        - Design Controls (part of the QSR) must consider the entire system, including how the device and drug interact.
         """)
+    with st.expander("▶️ **21 CFR Part 820: The Quality System Regulation (QSR) for Devices**"):
+        st.markdown("""
+        This is the FDA's rulebook for medical device manufacturing and design. The Design Controls section (`820.30`) is the foundation of this entire application. It mandates a systematic approach to design to ensure the final product is safe and effective.
+        - **Applies to:** The physical pill, its electronics, the embedded software, and the companion mobile app.
+        - **Key Principle:** You must document everything to prove you designed the device in a state of control. The DHF is that proof.
+        """)
+    with st.expander("▶️ **21 CFR Parts 210/211: Current Good Manufacturing Practices (cGMP) for Drugs**"):
+        st.markdown("""
+        This is the FDA's rulebook for pharmaceutical products. While this app focuses on the DHF (a device concept), the design of the Smart-Pill must not violate cGMP principles.
+        - **Applies to:** The drug substance itself and its interaction with a device.
+        - **Key Design Considerations:**
+            - **Material Compatibility:** The pill casing cannot contaminate or react with the drug.
+            - **Stability:** The device cannot cause the drug to degrade over its shelf life.
+            - **Release Profile:** The device's mechanism must release the drug in a way that is safe and therapeutically effective.
+        """)
+    with st.expander("▶️ **ISO 13485:2016: Quality Management Systems (International Standard)**"):
+        st.markdown("""
+        ISO 13485 is the internationally recognized standard for a medical device Quality Management System (QMS). It is very similar to the FDA's QSR but is required for market access in many other regions, including Europe (as part of MDR), Canada, and Australia.
+        - **Relationship to QSR:** Following the QSR gets you very close to ISO 13485 compliance. The key difference is that ISO 13485 places a stronger emphasis on **risk management** throughout the entire QMS.
+        - **Why it matters:** A DHF built to QSR standards is easily adaptable for ISO 13485 audits, enabling global market strategies.
+        """)
+    with st.expander("▶️ **ISO 14971:2019: Risk Management for Medical Devices (International Standard)**"):
+        st.markdown("""
+        This is the global "how-to" guide for risk management. Both the FDA and international regulators consider it the state-of-the-art process for ensuring device safety.
+        - **Process:** It defines a lifecycle approach: identify hazards, estimate and evaluate risks, implement controls, and monitor the effectiveness of those controls.
+        - **Role in this App:** The **"2. Risk Management"** section of the DHF Explorer is a direct implementation of the documentation required by ISO 14971.
+        """)
+    
+    st.divider()
 
+    # --- NEW CONTENT TAILORED TO THE SENIOR QUALITY ENGINEER ROLE ---
+    st.subheader("The Role of a Design Assurance Quality Engineer")
+    st.markdown("A Design Assurance QE is the steward of the DHF, ensuring compliance, quality, and safety are designed into the product from day one. This tool is designed to be their primary workspace. Key responsibilities within this framework include:")
+
+    with st.expander("✅ **Owning the Design History File (DHF)**"):
+        st.markdown("""
+        The QE is responsible for the **creation, remediation, and maintenance** of the DHF. It's not just a repository; it's a living document that tells the story of the product's development.
+        - This application serves as the DHF's active workspace.
+        - **Key QE Goal:** Ensure the DHF is complete, coherent, and audit-ready at all times. The Traceability Matrix is the QE's primary tool for identifying gaps.
+        """)
+    with st.expander("✅ **Driving Verification & Validation (V&V) Strategy**"):
+        st.markdown("""
+        The QE doesn't just witness tests; they help architect the entire V&V strategy.
+        - **V&V Master Plan:** This is a high-level document, referenced in the Design Plan, that outlines the scope, methods, and acceptance criteria for all V&V activities.
+        - **Protocol & Report Review:** The QE reviews and approves all test protocols (to ensure they are adequate) and reports (to ensure they are accurate and complete). The "Design Verification" and "Design Validation" sections track these deliverables.
+        """)
+    with st.expander("✅ **Ensuring Robust Test Methods (Test Method Validation - TMV)**"):
+        st.markdown("""
+        A core QE principle: **You cannot trust test results if you cannot trust the test method itself.** TMV is the process of providing objective evidence that a test method is accurate, precise, and reliable for its intended purpose.
+        - **When is it needed?** For any custom or non-standard test method used in V&V.
+        - **What does it involve?** Formal studies to assess:
+            - **Accuracy:** How close is the measurement to the true value?
+            - **Precision (Repeatability & Reproducibility):** How consistent are the results over time, with different operators, and on different equipment?
+            - **Linearity, Range, and Specificity:** Other parameters depending on the test type.
+        - **Documentation:** TMV results in a formal report that should be linked or referenced within the DHF.
+        """)
+    with st.expander("✅ **Applying Statistical Rationale**"):
+        st.markdown("""
+        "Because we said so" is not a valid rationale for an auditor. Statistical methods are required to provide objective evidence that the design is reliable and safe.
+        - **Sample Size Justification:** The QE must justify *why* a certain number of units were tested. This is often based on establishing a specific **Reliability and Confidence** level (e.g., "we are 95% confident that the device is 99% reliable").
+        - **Acceptance Criteria:** The pass/fail criteria for a test must be defined *before* the test is run and should be clinically relevant.
+        - **Data Analysis:** Using tools like capability analysis (Cpk), t-tests, or ANOVA to analyze test data and draw valid conclusions.
+        """)
+    with st.expander("✅ **Guiding Design Transfer and Supplier Quality**"):
+         st.markdown("""
+         The QE acts as the bridge between R&D and Manufacturing, ensuring the design can be produced consistently and at scale without losing quality.
+         - **Device Master Record (DMR):** The QE helps compile the DMR, which is the 'recipe' for building the device, derived from the Design Outputs.
+         - **Process Validation (IQ/OQ/PQ):** The QE oversees the validation of the manufacturing line itself.
+         - **Supplier Controls:** The QE is responsible for qualifying suppliers of critical components (like the battery or pill casing material), ensuring their quality systems are adequate. This is documented as part of Design Outputs and Transfer activities.
+         """)
+
+    st.divider()
     st.subheader("Visualizing the Process: The V-Model")
     st.markdown("The V-Model is a powerful way to visualize the Design Controls process, emphasizing the critical link between design (left side) and testing (right side).")
 
@@ -215,25 +274,6 @@ with tab4:
         st.image(v_model_image_path, caption="The V-Model illustrates the relationship between design decomposition and integration/testing.", use_container_width=True)
     else:
         st.error(f"Image Not Found: Ensure `v_model_diagram.png` is in the `{current_dir}` directory.", icon="🚨")
-
-    col1, col2 = st.columns(2)
-    with col1:
-        st.subheader("Left Side: Decomposition & Design")
-        st.markdown("""
-        Moving down the left side of the 'V' involves breaking down the high-level concept into detailed, buildable specifications.
-        - **User Needs & Intended Use:** What problem does the user need to solve?
-        - **Design Inputs (Requirements):** How must the device perform to meet those needs? This includes technical, functional, and safety requirements.
-        - **System & Architectural Design:** How will the components be structured to meet the requirements?
-        - **Detailed Design (Outputs):** At the lowest level, these are the final drawings, code, and specifications that are used to build the device.
-        """)
-    with col2:
-        st.subheader("Right Side: Integration & Testing")
-        st.markdown("""
-        Moving up the right side of the 'V' involves building the device from its components and testing at each level to ensure it matches the corresponding design phase on the left.
-        - **Unit/Component Verification:** Does each individual part meet its detailed design specification?
-        - **Integration & System Verification:** Do the assembled parts work together as defined in the architectural design?
-        - **Design Validation:** Does the final, complete device meet the high-level User Needs? This is the ultimate test.
-        """)
 
     st.success("""
     #### The Core Principle: Verification vs. Validation
