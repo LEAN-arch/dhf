@@ -1,7 +1,7 @@
 # File: dhf_dashboard/app.py
-# SME Note: This is the definitive, fully enhanced version. It replaces the previous
-# risk matrix with a professional-grade, intuitive "Risk Mitigation Flow" (Sankey Diagram)
-# that provides the clearest possible story of risk reduction.
+# SME Note: This is the definitive, all-inclusive, and untruncated version. It includes the robust
+# path correction block, the professional-grade QE dashboard with the optimal "Risk Mitigation Flow"
+# visualization, all educational content in its full unabridged form, and all bug fixes and feature enhancements.
 
 import sys
 import os
@@ -12,6 +12,9 @@ import plotly.express as px
 import numpy as np
 
 # --- ROBUST PATH CORRECTION BLOCK ---
+# This is the definitive fix for the ModuleNotFoundError.
+# It finds the project's root directory (the one containing 'dhf_dashboard')
+# and adds it to Python's search path.
 try:
     current_file_path = os.path.abspath(__file__)
     current_dir = os.path.dirname(current_file_path)
@@ -110,7 +113,6 @@ def render_risk_mitigation_flow_chart(ssm):
     df['initial_level'] = df.apply(lambda x: get_level(x['initial_S'], x['initial_O']), axis=1)
     df['final_level'] = df.apply(lambda x: get_level(x['final_S'], x['final_O']), axis=1)
     
-    # 1. Prepare data for Sankey diagram
     all_nodes = [f"Initial {level}" for level in ['Unacceptable', 'High', 'Medium', 'Low']] + \
                 [f"Residual {level}" for level in ['Unacceptable', 'High', 'Medium', 'Low']]
     node_map = {name: i for i, name in enumerate(all_nodes)}
@@ -125,29 +127,17 @@ def render_risk_mitigation_flow_chart(ssm):
     source_nodes = [node_map[f"Initial {row['initial_level']}"] for _, row in sankey_data.iterrows()]
     target_nodes = [node_map[f"Residual {row['final_level']}"] for _, row in sankey_data.iterrows()]
     values = [row['count'] for _, row in sankey_data.iterrows()]
-    
-    # Define link colors based on the destination node
     link_colors = [risk_config['colors'][row['final_level']] for _, row in sankey_data.iterrows()]
-    
-    # Create custom hover data
     hover_text = [f"<b>{row['count']} risk(s)</b> moved from {row['initial_level']} to {row['final_level']}:<br>{row['hazards']}" for _, row in sankey_data.iterrows()]
 
-    # 2. Create the Sankey figure
     fig = go.Figure(data=[go.Sankey(
         node=dict(
-            pad=15,
-            thickness=20,
-            line=dict(color="black", width=0.5),
-            label=all_nodes,
-            color=[risk_config['colors'][name.split(' ')[1]] for name in all_nodes]
+            pad=15, thickness=20, line=dict(color="black", width=0.5),
+            label=all_nodes, color=[risk_config['colors'][name.split(' ')[1]] for name in all_nodes]
         ),
         link=dict(
-            source=source_nodes,
-            target=target_nodes,
-            value=values,
-            color=link_colors,
-            customdata=hover_text,
-            hovertemplate='%{customdata}<extra></extra>'
+            source=source_nodes, target=target_nodes, value=values,
+            color=link_colors, customdata=hover_text, hovertemplate='%{customdata}<extra></extra>'
         )
     )])
 
@@ -445,7 +435,9 @@ with tab4:
 
     v_model_image_path = os.path.join(os.path.dirname(__file__), "v_model_diagram.png")
     if os.path.exists(v_model_image_path):
-        st.image(v_model_image_path, caption="The V-Model illustrates the relationship between design decomposition and integration/testing.", use_container_width=True)
+        col1, col2, col3 = st.columns([1, 2, 1])
+        with col2:
+            st.image(v_model_image_path, caption="The V-Model illustrates the relationship between design decomposition and integration/testing.", width=600)
     else:
         st.error(f"Image Not Found: Ensure `v_model_diagram.png` is in the same directory as this script.", icon="🚨")
 
