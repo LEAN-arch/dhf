@@ -33,7 +33,7 @@ class SessionStateManager:
                         {"role": "Device Engineer", "name": "Bob Chen", "responsibility": "Hardware design, material selection."},
                         {"role": "Software Engineer", "name": "Charlie Day", "responsibility": "Embedded software, mobile app."},
                         {"role": "Pharma Scientist", "name": "Diana Evans", "responsibility": "Drug formulation, stability."},
-                        {"role": "Quality Engineer", "name": "Frank Green", "responsibility": "DHF owner, V&V strategy, Risk Mgmt."}
+                        {"role": "Quality Engineer", "name": "JOSE BAUTISTA", "responsibility": "DHF owner, V&V strategy, Risk Mgmt."}
                     ],
                 },
                 "risk_management_file": {
