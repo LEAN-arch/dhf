@@ -1,7 +1,7 @@
 # File: dhf_dashboard/app.py
-# SME Note: This is the definitive, all-inclusive, and untruncated version. It includes the robust
-# path correction block, the professional-grade QE dashboard, all educational content,
-# and small enhancements for feature discoverability based on user feedback.
+# SME Note: This is the definitive, fully enhanced version. It replaces the basic
+# risk heatmap with a professional-grade, interactive Risk Migration Matrix that
+# visually demonstrates the effectiveness of risk mitigation efforts.
 
 import sys
 import os
@@ -12,9 +12,6 @@ import plotly.express as px
 import numpy as np
 
 # --- ROBUST PATH CORRECTION BLOCK ---
-# This is the definitive fix for the ModuleNotFoundError.
-# It finds the project's root directory (the one containing 'dhf_dashboard')
-# and adds it to Python's search path.
 try:
     current_file_path = os.path.abspath(__file__)
     current_dir = os.path.dirname(current_file_path)
@@ -68,9 +65,9 @@ def render_design_control_tracker(ssm):
                     st.caption("Sign-off data is not in the correct format.")
     st.info("This tracker provides a live view of DHF completeness for gate review readiness. The overall project timeline is shown in the Gantt Chart at the bottom of this dashboard.", icon="💡")
 
-def render_risk_management_dashboard(ssm):
+def render_enhanced_risk_matrix(ssm):
     st.subheader("2. Risk Management Dashboard (ISO 14971, ICH Q9)")
-    st.markdown("Analyze the project's risk profile, including the top risks by RPN, historical trends, and mitigation status.")
+    st.markdown("Analyze the project's risk profile via an interactive Risk Migration Matrix, historical trends, and top risks.")
     hazards_data = ssm.get_data("risk_management_file", "hazards")
     historical_rpn = pd.DataFrame(ssm.get_data("risk_management_file", "historical_rpn"))
 
@@ -82,35 +79,89 @@ def render_risk_management_dashboard(ssm):
     df['initial_rpn'] = df['initial_S'] * df['initial_O'] * df['initial_D']
     df['final_rpn'] = df['final_S'] * df['final_O'] * df['final_D']
 
+    # --- Top Risks and Trend ---
     col1, col2 = st.columns(2)
     with col1:
         st.markdown("**Top 5 Risks by Initial RPN**")
         top_risks = df.sort_values('initial_rpn', ascending=False).head(5)
         st.dataframe(top_risks[['hazard_id', 'description', 'initial_rpn', 'final_rpn']], use_container_width=True)
-
     with col2:
         st.markdown("**RPN Trend Over Time**")
         if not historical_rpn.empty:
             fig = px.line(historical_rpn, x='date', y='total_rpn', title="Total Project RPN Reduction", markers=True)
             fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10))
             st.plotly_chart(fig, use_container_width=True)
+    st.divider()
 
-    st.markdown("**Residual Risk Heatmap (Severity vs. Occurrence)**")
-    
-    heatmap_data = df.pivot_table(index='final_S', columns='final_O', aggfunc='size', fill_value=0)
-    hover_text_data = df.groupby(['final_S', 'final_O'])['hazard_id'].apply(lambda x: '<br>'.join(x)).reset_index()
-    hover_pivot = hover_text_data.pivot_table(index='final_S', columns='final_O', values='hazard_id', aggfunc='first', fill_value="")
+    # --- Enhanced Risk Migration Matrix ---
+    st.markdown("**Interactive Risk Migration Matrix**")
+    st.caption("This matrix shows how risks have moved from their initial state to their residual state after mitigation. Hover over any cell for details.")
 
-    heatmap_data = heatmap_data.reindex(index=range(5, 0, -1), columns=range(1, 6), fill_value=0)
-    hover_pivot = hover_pivot.reindex(index=range(5, 0, -1), columns=range(1, 6), fill_value="No risks")
+    # 1. Define the risk matrix structure and colors
+    risk_config = {
+        'levels': { (1,1):'Low', (1,2):'Low', (1,3):'Low', (1,4):'Medium', (1,5):'Medium',
+                    (2,1):'Low', (2,2):'Low', (2,3):'Medium', (2,4):'Medium', (2,5):'High',
+                    (3,1):'Low', (3,2):'Medium', (3,3):'Medium', (3,4):'High', (3,5):'High',
+                    (4,1):'Medium', (4,2):'Medium', (4,3):'High', (4,4):'High', (4,5):'High',
+                    (5,1):'Medium', (5,2):'High', (5,3):'High', (5,4):'High', (5,5):'High' },
+        'colors': { 'High': '#d62728', 'Medium': '#ff7f0e', 'Low': '#2ca02c' }
+    }
 
-    fig = go.Figure(data=go.Heatmap(
-                   z=heatmap_data.values, x=heatmap_data.columns, y=heatmap_data.index,
-                   hoverongaps=False, colorscale='Reds', customdata=hover_pivot.values,
-                   hovertemplate='<b>Severity</b>: %{y}<br><b>Occurrence</b>: %{x}<br><b>Count</b>: %{z}<br><b>Hazard IDs</b>:<br>%{customdata}<extra></extra>'
-                   ))
-    fig.update_layout(title="Count of Residual Risks (Hover for Details)", yaxis_title="Severity", xaxis_title="Occurrence")
+    # 2. Prepare data pivots for counts and hover text
+    initial_counts = df.pivot_table(index='initial_S', columns='initial_O', aggfunc='size', fill_value=0)
+    final_counts = df.pivot_table(index='final_S', columns='final_O', aggfunc='size', fill_value=0)
+    initial_ids = df.groupby(['initial_S', 'initial_O'])['hazard_id'].apply(lambda x: '<br>'.join(x)).reset_index()
+    final_ids = df.groupby(['final_S', 'final_O'])['hazard_id'].apply(lambda x: '<br>'.join(x)).reset_index()
+
+    # 3. Create the figure and add a heatmap for background colors
+    fig = go.Figure()
+    s_range = range(1, 6)
+    o_range = range(1, 6)
+    z_colors = [[risk_config['colors'][risk_config['levels'].get((s, o), 'Low')] for o in o_range] for s in s_range]
+
+    fig.add_trace(go.Heatmap(z=np.zeros((5,5)), x=list(o_range), y=list(s_range),
+                             colorscale=z_colors, showscale=False, hoverinfo='none'))
+
+    # 4. Add annotations and custom hover data
+    annotations = []
+    hover_texts = []
+    for s in s_range:
+        hover_row = []
+        for o in o_range:
+            # Counts
+            i_count = initial_counts.at[s, o] if (s in initial_counts.index and o in initial_counts.columns) else 0
+            f_count = final_counts.at[s, o] if (s in final_counts.index and o in final_counts.columns) else 0
+            # IDs for hover
+            i_id_text = initial_ids.loc[(initial_ids['initial_S'] == s) & (initial_ids['initial_O'] == o), 'hazard_id'].values
+            i_id_text = i_id_text[0] if len(i_id_text) > 0 else 'None'
+            f_id_text = final_ids.loc[(final_ids['final_S'] == s) & (final_ids['final_O'] == o), 'hazard_id'].values
+            f_id_text = f_id_text[0] if len(f_id_text) > 0 else 'None'
+            
+            # Annotation Text
+            if i_count > 0 or f_count > 0:
+                annotations.append(dict(x=o, y=s, text=f"Initial: {i_count}<br>Residual: {f_count}",
+                                        showarrow=False, font=dict(color='white' if risk_config['levels'].get((s,o)) == 'High' else 'black')))
+            # Hover Text
+            hover_row.append(f"<b>Risk Level: {risk_config['levels'].get((s,o))}</b><br><br><b>Initial Risks Here:</b><br>{i_id_text}<br><br><b>Residual Risks Here:</b><br>{f_id_text}")
+        hover_texts.append(hover_row)
+
+    # Use a second, invisible heatmap layer for the rich hover text
+    fig.add_trace(go.Heatmap(z=np.zeros((5,5)), x=list(o_range), y=list(s_range),
+                             opacity=0, customdata=hover_texts,
+                             hovertemplate='<b>Severity</b>: %{y}<br><b>Occurrence</b>: %{x}<br>%{customdata}<extra></extra>'))
+
+    fig.update_layout(
+        title="Risk Migration Matrix (Initial vs. Residual)",
+        xaxis_title="Occurrence (O)", yaxis_title="Severity (S)",
+        yaxis=dict(autorange='reversed'), annotations=annotations,
+        width=700, height=700,
+        xaxis_side='top',
+        xaxis_ticksuffix='', yaxis_ticksuffix='',
+        plot_bgcolor='rgba(0,0,0,0)',
+        margin=dict(l=50, r=50, t=100, b=50)
+    )
     st.plotly_chart(fig, use_container_width=True)
+
 
 def render_vv_readiness_panel(ssm):
     st.subheader("3. Verification & Validation Readiness Panel")
@@ -234,7 +285,7 @@ with tab1:
 
     render_design_control_tracker(ssm)
     st.divider()
-    render_risk_management_dashboard(ssm)
+    render_enhanced_risk_matrix(ssm) # Calling the new enhanced function
     st.divider()
     render_vv_readiness_panel(ssm)
     st.divider()
