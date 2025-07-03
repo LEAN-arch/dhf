@@ -7,26 +7,20 @@ import sys
 import os
 import pandas as pd
 import streamlit as st
-from datetime import date
-
-# This block ensures the app can be run from anywhere
-current_dir = os.path.dirname(os.path.abspath(__file__))
-if current_dir not in sys.path:
-    sys.path.insert(0, current_dir)
 
 # --- MODULAR IMPORTS FROM THE PROJECT PACKAGE ---
-# SME Rationale: Centralized, clean imports. No more redundant code.
-from dhf_dashboard.utils.session_state_manager import SessionStateManager
-from dhf_dashboard.utils.critical_path_utils import find_critical_path
-from dhf_dashboard.utils.plot_utils import (
+# SME Rationale: Using relative imports to fix ModuleNotFoundError
+from utils.session_state_manager import SessionStateManager
+from utils.critical_path_utils import find_critical_path
+from utils.plot_utils import (
     create_progress_donut, create_risk_profile_chart,
     create_gantt_chart, create_action_item_chart
 )
-from dhf_dashboard.analytics.traceability_matrix import render_traceability_matrix
-from dhf_dashboard.analytics.action_item_tracker import render_action_item_tracker
+from analytics.traceability_matrix import render_traceability_matrix
+from analytics.action_item_tracker import render_action_item_tracker
 
 # Import all DHF section rendering functions
-from dhf_dashboard.dhf_sections import (
+from dhf_sections import (
     design_plan, design_risk_management, human_factors, design_inputs,
     design_outputs, design_reviews, design_verification, design_validation,
     design_transfer, design_changes
@@ -39,8 +33,6 @@ st.set_page_config(layout="wide", page_title="DHF Command Center", page_icon="�
 ssm = SessionStateManager()
 
 # --- DATA PREPARATION PIPELINE (CRASH-PROOF) ---
-# SME Rationale: Centralize data processing to create a pre-computed 'tasks_df'
-# that is used by multiple components (Gantt, Progress Donut, etc.).
 try:
     tasks_df = pd.DataFrame(ssm.get_data("project_management", "tasks"))
     if not tasks_df.empty:
@@ -48,7 +40,6 @@ try:
         tasks_df['end_date'] = pd.to_datetime(tasks_df['end_date'], errors='coerce')
         tasks_df.dropna(subset=['start_date', 'end_date'], inplace=True)
 
-        # Calculate critical path and styling for Gantt chart
         critical_path_ids = find_critical_path(tasks_df.copy())
         status_colors = {"Completed": "#2ca02c", "In Progress": "#1f77b4", "Not Started": "#7f7f7f", "At Risk": "#d62728"}
         tasks_df['color'] = tasks_df['status'].map(status_colors).fillna('#7f7f7f')
@@ -71,7 +62,6 @@ with st.sidebar:
     st.divider()
 
     st.header("Views")
-    # UX SME: Simplified navigation. Dashboard for overview, Explorer for details.
     main_selection = st.radio(
         "Select a View:",
         ["📊 Dashboard", "🗂️ DHF Explorer", "🔬 Advanced Analytics"],
@@ -80,10 +70,8 @@ with st.sidebar:
     )
     st.divider()
 
-    # Conditional sidebar for DHF Explorer view
     if main_selection == "🗂️ DHF Explorer":
         st.header("DHF Sections")
-        # Software SME: Pages dictionary maps selection to render function.
         PAGES = {
             "1. Design Plan": design_plan.render_design_plan,
             "2. Risk Management": design_risk_management.render_design_risk_management,
@@ -105,7 +93,6 @@ with st.sidebar:
 
 # --- MAIN PANEL RENDERING ---
 
-# ===== 1. DASHBOARD VIEW =====
 if main_selection == "📊 Dashboard":
     st.header("Project Health & KPIs")
     col1, col2, col3 = st.columns(3)
@@ -138,13 +125,10 @@ if main_selection == "📊 Dashboard":
     """
     st.markdown(legend_html, unsafe_allow_html=True)
 
-# ===== 2. DHF EXPLORER VIEW =====
 elif main_selection == "🗂️ DHF Explorer":
-    # The selected page function is called here, passing the session state manager
     page_function = PAGES[dhf_selection]
     page_function(ssm)
 
-# ===== 3. ADVANCED ANALYTICS VIEW =====
 elif main_selection == "🔬 Advanced Analytics":
     st.title("🔬 Advanced Analytics")
     analytics_tabs = st.tabs(["Traceability Matrix", "Action Item Tracker", "Project Task Editor"])
@@ -168,7 +152,6 @@ elif main_selection == "🔬 Advanced Analytics":
                 "end_date": st.column_config.DateColumn("End Date", format="YYYY-MM-DD")
             }
         )
-        # Check for changes before updating and rerunning
         original_subset = tasks_df[editable_cols].reset_index(drop=True)
         if not edited_df.reset_index(drop=True).equals(original_subset):
             ssm.update_data(edited_df.to_dict('records'), "project_management", "tasks")
