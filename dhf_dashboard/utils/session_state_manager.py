@@ -1,7 +1,7 @@
 # File: dhf_dashboard/utils/session_state_manager.py
-# SME Note: This version corrects the data model regression by re-introducing the
-# 'linked_input_id' key to the design_outputs section, which is critical for the
-# Traceability Matrix to function correctly.
+# SME Note: This version provides the definitive fix for all KeyError issues by ensuring
+# the mock data model contains all keys required by the application's analytics,
+# specifically restoring 'output_verified' to the design_verification tests.
 
 import streamlit as st
 from datetime import date, timedelta
@@ -12,15 +12,13 @@ class SessionStateManager:
     professional-grade Design Assurance dashboard.
     """
     def __init__(self):
-        # The version number is not incremented here as it's a bug fix, not a new model.
-        # However, if users already have a broken state, incrementing to 7 would force a clean refresh.
-        # For a clean environment, 6 is fine. Let's increment to be safe.
-        CURRENT_DATA_VERSION = 7
+        # Incrementing the version to 8 to guarantee a fresh data load for all users.
+        CURRENT_DATA_VERSION = 8
 
         if ('dhf_data' not in st.session_state or
             st.session_state.dhf_data.get('data_version') != CURRENT_DATA_VERSION):
 
-            st.toast(f"Data Fix: Initializing corrected mock data (v{CURRENT_DATA_VERSION})...")
+            st.toast(f"Data Model Fix: Initializing definitive mock data (v{CURRENT_DATA_VERSION})...")
 
             base_date = date(2024, 1, 15)
 
@@ -39,7 +37,6 @@ class SessionStateManager:
                 },
                 "risk_management_file": {
                     "hazards": [
-                        # S=Severity, O=Occurrence, D=Detection. RPN = S * O * D
                         {"hazard_id": "H-001", "description": "Incorrect drug dosage delivered (overdose)", "initial_S": 5, "initial_O": 3, "initial_D": 4, "final_S": 5, "final_O": 1, "final_D": 2},
                         {"hazard_id": "H-002", "description": "Biocompatibility failure (material leaching)", "initial_S": 5, "initial_O": 2, "initial_D": 3, "final_S": 5, "final_O": 1, "final_D": 1},
                         {"hazard_id": "H-003", "description": "Battery failure during use (no therapy)", "initial_S": 4, "initial_O": 2, "initial_D": 5, "final_S": 2, "final_O": 1, "final_D": 2},
@@ -62,7 +59,6 @@ class SessionStateManager:
                 },
                 "design_outputs": {
                     "documents": [
-                        # --- FIX IS HERE: The 'linked_input_id' key has been restored to each document ---
                         {"id": "DO-001", "title": "User Needs Document", "phase": "User Needs", "status": "Approved", "linked_input_id": "UN-001"},
                         {"id": "DO-002", "title": "System Requirements Spec", "phase": "Design Inputs", "status": "Approved", "linked_input_id": "UN-001"},
                         {"id": "DO-003", "title": "Risk Management Plan", "phase": "Design Inputs", "status": "Approved", "linked_input_id": "UN-001"},
@@ -73,9 +69,10 @@ class SessionStateManager:
                 },
                 "design_verification": {
                     "tests": [
-                        {"id": "VER-001", "name": "Pill Diameter Test", "status": "Completed", "tmv_status": "N/A", "risk_control": "SR-001"},
-                        {"id": "VER-002", "name": "Dose Accuracy Assay", "status": "In Progress", "tmv_status": "Required", "risk_control": "RC-001"},
-                        {"id": "VER-003", "name": "ISO 10993 Biocompatibility Study", "status": "Not Started", "tmv_status": "Completed", "risk_control": "RC-002"},
+                        # --- FIX IS HERE: Restored 'output_verified' and corrected 'risk_control' to 'risk_control_verified_id' ---
+                        {"id": "VER-001", "name": "Pill Diameter Test", "status": "Completed", "tmv_status": "N/A", "output_verified": "DO-004", "risk_control_verified_id": "SR-001"},
+                        {"id": "VER-002", "name": "Dose Accuracy Assay", "status": "In Progress", "tmv_status": "Required", "output_verified": "DO-005", "risk_control_verified_id": "RC-001"},
+                        {"id": "VER-003", "name": "ISO 10993 Biocompatibility Study", "status": "Not Started", "tmv_status": "Completed", "output_verified": "DO-006", "risk_control_verified_id": "RC-002"},
                     ]
                 },
                 "quality_system": {
@@ -89,13 +86,12 @@ class SessionStateManager:
                         {"supplier": "BatteryCorp", "status": "Pass with Observations", "date": "2024-04-20"},
                     ],
                     "continuous_improvement": [
-                        {"date": "2024-03-10", "area": "Documentation", "impact": 15}, # 15% lead time reduction
+                        {"date": "2024-03-10", "area": "Documentation", "impact": 15},
                         {"date": "2024-05-20", "area": "Testing", "impact": 10},
                     ]
                 },
                 "project_management": {
                     "tasks": [
-                        # Added sign_offs dictionary
                         {"id": "NEEDS", "name": "User Needs", "start_date": base_date, "end_date": base_date + timedelta(days=14), "status": "Completed", "completion_pct": 100, "sign_offs": {"R&D": "✅", "Quality": "✅", "Marketing": "✅"}},
                         {"id": "INPUTS", "name": "Design Inputs", "start_date": base_date + timedelta(days=15), "end_date": base_date + timedelta(days=30), "status": "Completed", "completion_pct": 100, "sign_offs": {"R&D": "✅", "Quality": "✅", "Regulatory": "✅"}},
                         {"id": "OUTPUTS", "name": "Design Outputs", "start_date": base_date + timedelta(days=31), "end_date": base_date + timedelta(days=90), "status": "In Progress", "completion_pct": 60, "sign_offs": {"R&D": "In Progress", "Quality": "Pending", "Regulatory": "Pending"}},
@@ -103,7 +99,6 @@ class SessionStateManager:
                         {"id": "TRANSFER", "name": "Design Transfer", "start_date": base_date + timedelta(days=181), "end_date": base_date + timedelta(days=210), "status": "Not Started", "completion_pct": 0, "sign_offs": {"Manufacturing": "Pending", "Quality": "Pending"}},
                     ]
                 },
-                # Keep other sections for DHF Explorer to function
                 "design_reviews": {"reviews":[]}, "human_factors":{"use_scenarios":[]}, "design_validation":{"studies":[]}, "design_transfer":{"activities":[]}, "design_changes":{"changes":[]}
             }
 
