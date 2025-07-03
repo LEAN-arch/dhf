@@ -166,8 +166,9 @@ with tab4:
             st.success("Project tasks updated!")
             st.rerun()
     else:
-        page_module = PAGES[selection]
-        page_module.render(ssm)
+        # ------------------- FIX IS HERE -------------------
+        # The redundant second call to page_module.render(ssm) has been removed.
         page_module = PAGES[selection]
         # Call the 'render' function within that module
         page_module.render(ssm)
+        # ----------------- END OF FIX ------------------
