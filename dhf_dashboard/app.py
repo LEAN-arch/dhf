@@ -1,11 +1,35 @@
-# File: app.py (This file should be in your project root, NOT inside dhf_dashboard)
+# File: dhf_dashboard/app.py
+# SME Rationale: This version includes a robust path-correction block at the top.
+# This makes the app runnable even when the script is located inside its own package,
+# which is the cause of the ModuleNotFoundError.
 
+import sys
+import os
 import pandas as pd
 import streamlit as st
 
+# --- ROBUST PATH CORRECTION BLOCK ---
+# This is the definitive fix for the ModuleNotFoundError.
+# It finds the project's root directory (the one containing 'dhf_dashboard')
+# and adds it to Python's search path.
+try:
+    # Get the absolute path of the current file (app.py)
+    current_file_path = os.path.abspath(__file__)
+    # Get the directory containing the current file (dhf_dashboard)
+    current_dir = os.path.dirname(current_file_path)
+    # Get the parent directory (the project root)
+    project_root = os.path.dirname(current_dir)
+    # Add the project root to the system path if it's not already there
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+except Exception as e:
+    st.error(f"Error adjusting system path: {e}")
+# --- END OF PATH CORRECTION BLOCK ---
+
+
 # --- MODULAR IMPORTS FROM THE PROJECT PACKAGE ---
-# SME Rationale: With app.py outside the package, we now use absolute imports
-# from the 'dhf_dashboard' package. This is the standard, correct way.
+# These imports will now work correctly because the path correction
+# block has made the 'dhf_dashboard' package visible.
 from dhf_dashboard.utils.session_state_manager import SessionStateManager
 from dhf_dashboard.utils.critical_path_utils import find_critical_path
 from dhf_dashboard.utils.plot_utils import (
@@ -26,8 +50,10 @@ from dhf_dashboard.dhf_sections import (
 st.set_page_config(layout="wide", page_title="DHF Command Center", page_icon="🚀")
 
 # --- INITIALIZE SESSION STATE ---
-# The SessionStateManager class itself does not need any changes.
 ssm = SessionStateManager()
+
+# --- The rest of the file is identical to the last correct version ---
+# (No changes needed below this line)
 
 # --- DATA PREPARATION PIPELINE (CRASH-PROOF) ---
 try:
