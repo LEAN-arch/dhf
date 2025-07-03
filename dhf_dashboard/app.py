@@ -203,15 +203,16 @@ with tab1:
     if not tasks_df.empty:
         gantt_fig = create_gantt_chart(tasks_df)
         st.plotly_chart(gantt_fig, use_container_width=True)
+        # Fully implemented Gantt Chart Legend
         legend_html = """
-        <div style="padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin-top: 15px;">
+        <div style="padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin-top: 15px; font-size: 0.9em;">
         <b>Legend:</b>
-        <ul style="list-style-type: none; padding-left: 0;">
-            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#2ca02c; margin-right: 5px; vertical-align: middle;"></span> Completed</li>
-            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#ff7f0e; margin-right: 5px; vertical-align: middle;"></span> In Progress</li>
-            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#d62728; margin-right: 5px; vertical-align: middle;"></span> At Risk</li>
-            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#7f7f7f; margin-right: 5px; vertical-align: middle;"></span> Not Started</li>
-            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:13px; height:13px; border: 2px solid red; margin-right: 5px; vertical-align: middle;"></span> Task on Critical Path</li>
+        <ul style="list-style-type: none; padding-left: 0; margin-top: 5px;">
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#2ca02c; margin-right: 8px; vertical-align: middle; border-radius: 3px;"></span> Completed</li>
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#ff7f0e; margin-right: 8px; vertical-align: middle; border-radius: 3px;"></span> In Progress</li>
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#d62728; margin-right: 8px; vertical-align: middle; border-radius: 3px;"></span> At Risk</li>
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#7f7f7f; margin-right: 8px; vertical-align: middle; border-radius: 3px;"></span> Not Started</li>
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:11px; height:11px; border: 2px solid red; margin-right: 8px; vertical-align: middle; border-radius: 3px;"></span> Task on Critical Path</li>
         </ul>
         </div>
         """
@@ -227,7 +228,6 @@ with tab3:
     st.header("The Design Control Process (V-Model)")
     v_model_image_path = os.path.join(current_dir, "v_model_diagram.png")
     if os.path.exists(v_model_image_path):
-        # DEFINITIVE FIX: Replaced use_column_width with use_container_width
         st.image(v_model_image_path, use_container_width=True)
     else:
         st.error(f"Image Not Found: Ensure `v_model_diagram.png` is in the `{current_dir}` directory.", icon="🚨")
