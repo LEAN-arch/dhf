@@ -103,11 +103,13 @@ class SessionStateManager:
             }
 
     def get_data(self, primary_key, secondary_key=None):
+        """Safely retrieves data from the session state."""
         if secondary_key:
             return st.session_state.dhf_data.get(primary_key, {}).get(secondary_key, [])
         return st.session_state.dhf_data.get(primary_key, {})
 
     def update_data(self, data, primary_key, secondary_key=None):
+        """Updates data in the session state."""
         if secondary_key:
             if primary_key not in st.session_state.dhf_data:
                 st.session_state.dhf_data[primary_key] = {}
