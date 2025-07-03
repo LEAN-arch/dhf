@@ -8,7 +8,7 @@ import pandas as pd
 import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import timedelta, date
+from datetime import date, timedelta
 
 # This block ensures the app can be run from anywhere
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -17,14 +17,35 @@ if parent_dir not in sys.path:
     sys.path.insert(0, parent_dir)
 
 # --- IMPORTS FROM THE PROJECT PACKAGE ---
+# These are assumed to exist and be correct from previous steps.
 from dhf_dashboard.utils.session_state_manager import SessionStateManager
-from dhf_dashboard.utils.plot_utils import create_gantt_chart, create_progress_donut, create_risk_profile_chart, create_action_item_chart
 from dhf_dashboard.utils.critical_path_utils import find_critical_path
 from dhf_dashboard.analytics.traceability_matrix import render_traceability_matrix
 from dhf_dashboard.analytics.action_item_tracker import render_action_item_tracker
 
-# --- DEFINITIVE FIX: Define all page rendering functions directly inside app.py ---
+# --- CONSOLIDATED PLOTTING FUNCTIONS ---
+def create_progress_donut(completion_pct: float):
+    fig = go.Figure(go.Indicator(mode="gauge+number", value=completion_pct, title={'text': "<b>Overall Project Progress</b>"}, number={'suffix': "%"}, gauge={'axis': {'range': [None, 100]},'bar': {'color': "#2ca02c"}}))
+    fig.update_layout(height=250, margin=dict(l=10, r=10, t=50, b=10))
+    return fig
 
+def create_risk_profile_chart(hazards_df: pd.DataFrame):
+    if hazards_df.empty: return go.Figure(layout_title_text="<b>Risk Profile</b>")
+    risk_levels = ['Low', 'Medium', 'High']
+    initial_counts = hazards_df['initial_risk'].value_counts().reindex(risk_levels, fill_value=0)
+    final_counts = hazards_df['final_risk'].value_counts().reindex(risk_levels, fill_value=0)
+    fig = go.Figure(data=[go.Bar(name='Initial', x=risk_levels, y=initial_counts.values), go.Bar(name='Residual', x=risk_levels, y=final_counts.values)])
+    fig.update_layout(barmode='group', title_text="<b>Risk Profile (Initial vs. Residual)</b>", title_x=0.5)
+    return fig
+
+def create_gantt_chart(tasks_df: pd.DataFrame):
+    if tasks_df.empty: return go.Figure()
+    fig = px.timeline(tasks_df, x_start="start_date", x_end="end_date", y="name", color="color", color_discrete_map="identity")
+    fig.update_traces(text=tasks_df['display_text'], textposition='inside', marker_line_color=tasks_df['line_color'], marker_line_width=tasks_df['line_width'])
+    fig.update_layout(showlegend=False, title_x=0.5, xaxis_title="Date", yaxis_title="DHF Phase", yaxis_categoryorder='array', yaxis_categoryarray=tasks_df.sort_values("start_date", ascending=False)["name"].tolist())
+    return fig
+
+# --- CONSOLIDATED PAGE RENDER FUNCTIONS ---
 def render_design_plan(ssm):
     st.subheader("1. Design and Development Plan")
     st.markdown("This section outlines the overall plan for the project, including scope, team, and major activities.")
@@ -92,16 +113,13 @@ def render_design_changes(ssm):
     st.markdown("Formal control and documentation of any changes to the design.")
     st.warning("This is a placeholder page for Design Change Control records.")
 
-# --- END OF PAGE FUNCTIONS ---
-
-
 # --- PAGE CONFIGURATION ---
 st.set_page_config(layout="wide", page_title="DHF Command Center", page_icon="🚀")
 
 # --- INITIALIZE SESSION STATE ---
 ssm = SessionStateManager()
 
-# --- DATA PIPELINE ---
+# --- CRASH-PROOF DATA PIPELINE ---
 try:
     tasks_df = pd.DataFrame(ssm.get_data("project_management", "tasks"))
     if not tasks_df.empty:
@@ -118,8 +136,6 @@ try:
 except Exception as e:
     st.error(f"FATAL ERROR during data preparation: {e}", icon="🚨")
     st.stop()
-# --- END OF DATA PIPELINE ---
-
 
 # --- MAIN APP UI ---
 st.title("🚀 DHF Command Center")
@@ -148,26 +164,69 @@ with tab1:
     if not tasks_df.empty:
         gantt_fig = create_gantt_chart(tasks_df)
         st.plotly_chart(gantt_fig, use_container_width=True)
-        legend_html = """...""" # Legend HTML from previous correct version
+        legend_html = """
+        <div style="padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin-top: 15px;">
+        <b>Legend:</b>
+        <ul style="list-style-type: none; padding-left: 0;">
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#2ca02c; margin-right: 5px; vertical-align: middle;"></span> Completed</li>
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#ff7f0e; margin-right: 5px; vertical-align: middle;"></span> In Progress</li>
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#d62728; margin-right: 5px; vertical-align: middle;"></span> At Risk</li>
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#7f7f7f; margin-right: 5px; vertical-align: middle;"></span> Not Started</li>
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:13px; height:13px; border: 2px solid red; margin-right: 5px; vertical-align: middle;"></span> Task on Critical Path</li>
+        </ul>
+        </div>
+        """
         st.markdown(legend_html, unsafe_allow_html=True)
     else:
         st.warning("No project tasks found.")
 
 with tab2:
     st.header("Compliance & Execution Analytics")
-    analytics_selection = st.selectbox("Choose Analytics View:", ["Traceability Matrix", "Action Item Tracker"])
-    if analytics_selection == "Traceability Matrix":
-        render_traceability_matrix(ssm)
-    elif analytics_selection == "Action Item Tracker":
-        render_action_item_tracker(ssm)
+    render_traceability_matrix(ssm)
 
 with tab3:
     st.header("The Design Control Process (V-Model)")
     v_model_image_path = os.path.join(current_dir, "v_model_diagram.png")
     if os.path.exists(v_model_image_path):
-        st.image(v_model_image_path, caption="The V-Model for system development.")
+        st.image(v_model_image_path, use_column_width=True)
     else:
-        st.error(f"Image Not Found: Ensure `v_model_diagram.png` is in the `{current_dir}` directory.", icon="🚨")
+        st.error(f"Image Not Found: Please ensure `v_model_diagram.png` is in the `{current_dir}` directory.", icon="🚨")
+    
+    st.markdown("---")
+    st.subheader("Understanding the V-Model")
+    st.markdown("""
+    The **V-Model** is a cornerstone of regulated product development, especially in the medical device and software industries. It provides a visual map of the entire development lifecycle, emphasizing the critical relationship between the design phase and the testing phase.
+    
+    The model gets its name from its "V" shape, which illustrates a sequential path of decomposition on the left side and integration/re-composition on the right side.
+    """)
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("Left Side: Design & Decomposition")
+        st.markdown("""
+        The left side of the "V" represents the design and development process, moving from high-level concepts to detailed implementation.
+        - **1. Requirements:** Starts with capturing high-level user needs and system requirements. This defines *what* the system must do.
+        - **2. Analysis and Architecture:** The requirements are analyzed to create a high-level system architecture. This defines *how* the system will be structured to meet the requirements.
+        - **3. Design:** The architecture is broken down into detailed component designs and specifications. This is where individual modules and their interfaces are defined.
+        - **4. Coding & Prototyping:** At the bottom of the "V", the detailed designs are implemented as code, hardware prototypes, or engineering models.
+        """)
+
+    with col2:
+        st.subheader("Right Side: Testing & Integration")
+        st.markdown("""
+        The right side represents the integration and testing process, ensuring that what was built matches what was designed.
+        - **1. Unit & Subsystem Tests:** Each individual code module or component is tested in isolation to verify it works according to its detailed design specification.
+        - **2. Integration Tests:** Verified components are progressively assembled into larger subsystems, and the interfaces between them are tested. This verifies the system architecture.
+        - **3. Acceptance Tests (System Validation):** The fully integrated system is tested against the initial user needs and requirements to validate that it correctly solves the intended problem.
+        """)
+
+    st.subheader("Verification vs. Validation: The Core Principle")
+    st.info("""
+    - **Verification (Horizontal Arrows):** Answers the question, **"Are we building the product right?"** It is the process of confirming that a design output meets its specified input requirements (e.g., does the code correctly implement the detailed design?).
+    - **Validation (Top-Level Arrow):** Answers the question, **"Are we building the right product?"** It is the process of confirming that the final, finished product meets the user's actual needs and its intended use.
+    """)
+
 
 with tab4:
     st.header(f"DHF Section Details: {selection}")
