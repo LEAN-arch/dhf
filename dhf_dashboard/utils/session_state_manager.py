@@ -1,7 +1,7 @@
 # File: dhf_dashboard/utils/session_state_manager.py
-# SME Note: This is the definitive, fully populated data model. It makes a specific
-# adjustment to ensure the Quality Lead, JOSE BAUTISTA, has no overdue tasks,
-# while preserving the "Overdue" functionality for other team members.
+# SME Note: This is the definitive, fully populated data model. It makes a final
+# adjustment to all dates to be July 2025 and beyond, ensuring a consistent
+# and forward-looking demonstration.
 
 import streamlit as st
 from datetime import date, timedelta
@@ -12,16 +12,17 @@ class SessionStateManager:
     professional-grade Design Assurance dashboard.
     """
     def __init__(self):
-        # Incrementing version to 16 to load the personalized data.
+        # Incrementing version to 16 to load the final date-adjusted data.
         CURRENT_DATA_VERSION = 16
 
         if ('dhf_data' not in st.session_state or
             st.session_state.dhf_data.get('data_version') != CURRENT_DATA_VERSION):
 
-            st.toast(f"Loading Personalized Data Model (v{CURRENT_DATA_VERSION})...")
+            st.toast(f"Loading Definitive Project Timeline (v{CURRENT_DATA_VERSION})...")
 
-            base_date = date(2024, 1, 15)
-            current_date = date.today()
+            # --- NEW DATE ANCHORS ---
+            base_date = date(2025, 7, 1) # Project Start Date
+            demo_current_date = base_date + timedelta(days=45) # Simulates "Today" as August 15, 2025
 
             st.session_state.dhf_data = {
                 "data_version": CURRENT_DATA_VERSION,
@@ -44,7 +45,11 @@ class SessionStateManager:
                         {"hazard_id": "H-004", "description": "Loss of data integrity (cybersecurity breach)", "initial_S": 3, "initial_O": 3, "initial_D": 2, "final_S": 3, "final_O": 1, "final_D": 1},
                         {"hazard_id": "H-005", "description": "Pill casing cracks (choking hazard)", "initial_S": 5, "initial_O": 1, "initial_D": 2, "final_S": 5, "final_O": 1, "final_D": 1},
                     ],
-                    "historical_rpn": [{"date": "2024-02-01", "total_rpn": 350}, {"date": "2024-04-01", "total_rpn": 210}, {"date": "2024-06-01", "total_rpn": 95}],
+                    "historical_rpn": [
+                        {"date": base_date + timedelta(days=10), "total_rpn": 350},
+                        {"date": base_date + timedelta(days=25), "total_rpn": 210},
+                        {"date": base_date + timedelta(days=40), "total_rpn": 95}
+                    ],
                     "fta_document_ref": "FTA-001 - System Safety Analysis",
                     "dfmea": [
                         {"id": "DFMEA-01", "failure_mode": "Pill casing seal failure", "potential_effect": "Drug leakage, incorrect dose", "S": 5, "O": 2, "D": 2, "mitigation": "Redesigned seal geometry, add seal integrity test."},
@@ -81,16 +86,14 @@ class SessionStateManager:
                 },
                 "design_reviews": {
                     "reviews":[
-                        {"date": date(2024, 5, 10), "attendees": "A. Weber, B. Chen, JOSE BAUTISTA, C. Day, D. Evans", "notes": "Phase 1 Gate Review completed. Approved to proceed to detailed design. Key action items on material sourcing and software architecture.", "is_gate_review": True,
+                        {"date": base_date + timedelta(days=30), "attendees": "A. Weber, B. Chen, JOSE BAUTISTA, C. Day, D. Evans", "notes": "Phase 1 Gate Review completed. Approved to proceed to detailed design. Key action items on material sourcing and software architecture.", "is_gate_review": True,
                          "action_items": [
-                            {"id": "AI-DR1-01", "description": "Finalize biocompatible polymer selection from approved supplier list.", "owner": "B. Chen", "due_date": date(2024, 5, 24), "status": "Completed"},
-                            # --- FIX IS HERE: Changed due date to be in the future ---
-                            {"id": "AI-DR1-02", "description": "Update Risk Management File with outputs from this review.", "owner": "JOSE BAUTISTA", "due_date": current_date + timedelta(days=5), "status": "In Progress"},
-                            {"id": "AI-DR1-03", "description": "Create detailed CAD models for manufacturing molds.", "owner": "B. Chen", "due_date": current_date + timedelta(days=30), "status": "In Progress"},
-                            {"id": "AI-DR1-04", "description": "Develop initial firmware for Bluetooth communication handshake.", "owner": "C. Day", "due_date": current_date + timedelta(days=45), "status": "Open"},
-                            # This item remains overdue to demonstrate functionality
-                            {"id": "AI-DR1-05", "description": "Finalize drug stability protocol for combination testing.", "owner": "D. Evans", "due_date": current_date - timedelta(days=10), "status": "Open"},
-                            {"id": "AI-DR1-06", "description": "Draft V&V Master Plan.", "owner": "JOSE BAUTISTA", "due_date": current_date + timedelta(days=15), "status": "In Progress"}
+                            {"id": "AI-DR1-01", "description": "Finalize biocompatible polymer selection from approved supplier list.", "owner": "B. Chen", "due_date": demo_current_date - timedelta(days=5), "status": "Completed"},
+                            {"id": "AI-DR1-02", "description": "Update Risk Management File with outputs from this review.", "owner": "JOSE BAUTISTA", "due_date": demo_current_date + timedelta(days=5), "status": "In Progress"},
+                            {"id": "AI-DR1-03", "description": "Create detailed CAD models for manufacturing molds.", "owner": "B. Chen", "due_date": demo_current_date + timedelta(days=30), "status": "In Progress"},
+                            {"id": "AI-DR1-04", "description": "Develop initial firmware for Bluetooth communication handshake.", "owner": "C. Day", "due_date": demo_current_date + timedelta(days=45), "status": "Open"},
+                            {"id": "AI-DR1-05", "description": "Finalize drug stability protocol for combination testing.", "owner": "D. Evans", "due_date": demo_current_date - timedelta(days=10), "status": "Open"}, # This will be overdue
+                            {"id": "AI-DR1-06", "description": "Draft V&V Master Plan.", "owner": "JOSE BAUTISTA", "due_date": demo_current_date + timedelta(days=15), "status": "In Progress"}
                         ]}
                     ]
                 },
@@ -104,7 +107,7 @@ class SessionStateManager:
                 "design_validation": {"studies": [{"id": "VAL-001", "study_name": "Simulated Use Human Factors Study (n=15)", "user_need_validated": "UN-001", "risk_control_effectiveness": True, "result": "In Progress", "report_file": ""}]},
                 "design_transfer": {
                     "activities": [
-                        {"activity": "Installation Qualification (IQ) - Assembly Line A", "responsible_party": "Mfg. Eng.", "status": "Completed", "completion_date": date(2024, 6, 1), "evidence_link": "IQ-RPT-01.pdf"},
+                        {"activity": "Installation Qualification (IQ) - Assembly Line A", "responsible_party": "Mfg. Eng.", "status": "Completed", "completion_date": demo_current_date - timedelta(days=30), "evidence_link": "IQ-RPT-01.pdf"},
                         {"activity": "Operational Qualification (OQ) - Assembly Line A", "responsible_party": "Mfg. Eng.", "status": "In Progress", "completion_date": None, "evidence_link": ""},
                         {"activity": "Performance Qualification (PQ) - Assembly Line A", "responsible_party": "JOSE BAUTISTA", "status": "Not Started", "completion_date": None, "evidence_link": ""},
                         {"activity": "Finalize Device Master Record (DMR)", "responsible_party": "JOSE BAUTISTA", "status": "In Progress", "completion_date": None, "evidence_link": ""}
@@ -113,8 +116,8 @@ class SessionStateManager:
                 "design_changes": {"changes": [{"id": "DCR-001", "description": "Change battery supplier from BatteryCorp to PowerPlus for improved cycle life.", "reason": "Improved reliability based on new test data.", "impact_analysis": "Minimal impact. PowerPlus battery is form-fit-function equivalent. Requires regression testing of power management software.", "approval_status": "Pending", "approval_date": None}]},
                 "quality_system": {
                     "capa_records": [{"id": "CAPA-01", "status": "Closed", "source": "Internal Audit"}, {"id": "CAPA-02", "status": "Open", "source": "Supplier Corrective Action"}],
-                    "supplier_audits": [{"supplier": "PillCasing Inc.", "status": "Pass", "date": "2024-03-15"}, {"supplier": "BatteryCorp", "status": "Pass with Observations", "date": "2024-04-20"}],
-                    "continuous_improvement": [{"date": "2024-03-10", "area": "Documentation", "impact": 15}, {"date": "2024-05-20", "area": "Testing", "impact": 10}],
+                    "supplier_audits": [{"supplier": "PillCasing Inc.", "status": "Pass", "date": base_date + timedelta(days=20)}, {"supplier": "BatteryCorp", "status": "Pass with Observations", "date": base_date + timedelta(days=35)}],
+                    "continuous_improvement": [{"date": base_date + timedelta(days=15), "area": "Documentation", "impact": 15}, {"date": base_date + timedelta(days=40), "area": "Testing", "impact": 10}],
                     "cgmp_compliance": {
                         "stability_studies": [
                             {"id": "STAB-01", "duration": "3 Months", "condition": "Accelerated", "status": "Completed - Pass"},
@@ -125,11 +128,11 @@ class SessionStateManager:
                 },
                 "project_management": {
                     "tasks": [
-                        {"id": "NEEDS", "name": "User Needs", "start_date": base_date, "end_date": base_date + timedelta(days=14), "status": "Completed", "completion_pct": 100, "sign_offs": {"R&D": "✅", "Quality": "✅", "Marketing": "✅"}},
-                        {"id": "INPUTS", "name": "Design Inputs", "start_date": base_date + timedelta(days=15), "end_date": base_date + timedelta(days=30), "status": "Completed", "completion_pct": 100, "sign_offs": {"R&D": "✅", "Quality": "✅", "Regulatory": "✅"}},
-                        {"id": "OUTPUTS", "name": "Design Outputs", "start_date": base_date + timedelta(days=31), "end_date": base_date + timedelta(days=90), "status": "In Progress", "completion_pct": 60, "sign_offs": {"R&D": "In Progress", "Quality": "Pending", "Regulatory": "Pending"}},
-                        {"id": "V&V", "name": "Verification & Validation", "start_date": base_date + timedelta(days=91), "end_date": base_date + timedelta(days=180), "status": "Not Started", "completion_pct": 10, "sign_offs": {"R&D": "Pending", "Quality": "Pending", "Regulatory": "Pending"}},
-                        {"id": "TRANSFER", "name": "Design Transfer", "start_date": base_date + timedelta(days=181), "end_date": base_date + timedelta(days=210), "status": "Not Started", "completion_pct": 0, "sign_offs": {"Manufacturing": "Pending", "Quality": "Pending"}},
+                        {"id": "NEEDS", "name": "User Needs", "start_date": base_date, "end_date": base_date + timedelta(days=30), "status": "Completed", "completion_pct": 100, "sign_offs": {"R&D": "✅", "Quality": "✅", "Marketing": "✅"}},
+                        {"id": "INPUTS", "name": "Design Inputs", "start_date": base_date + timedelta(days=31), "end_date": base_date + timedelta(days=60), "status": "In Progress", "completion_pct": 75, "sign_offs": {"R&D": "In Progress", "Quality": "✅", "Regulatory": "Pending"}},
+                        {"id": "OUTPUTS", "name": "Design Outputs", "start_date": base_date + timedelta(days=61), "end_date": base_date + timedelta(days=120), "status": "Not Started", "completion_pct": 0, "sign_offs": {"R&D": "Pending", "Quality": "Pending", "Regulatory": "Pending"}},
+                        {"id": "V&V", "name": "Verification & Validation", "start_date": base_date + timedelta(days=121), "end_date": base_date + timedelta(days=200), "status": "Not Started", "completion_pct": 0, "sign_offs": {"R&D": "Pending", "Quality": "Pending", "Regulatory": "Pending"}},
+                        {"id": "TRANSFER", "name": "Design Transfer", "start_date": base_date + timedelta(days=201), "end_date": base_date + timedelta(days=240), "status": "Not Started", "completion_pct": 0, "sign_offs": {"Manufacturing": "Pending", "Quality": "Pending"}},
                     ]
                 },
                 "quality_by_design": {
