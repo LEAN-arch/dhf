@@ -28,8 +28,16 @@ def render_traceability_matrix(ssm):
 
     # 3. Map Outputs to Inputs
     if not outputs.empty and 'linked_input_id' in outputs.columns and 'id' in outputs.columns:
-        output_map = outputs.groupby('linked_input_id')['id'].apply(lambda x: ', '.join(x) if x.any() else "❌")
-        trace_matrix['Design Output'] = trace_matrix.index.map(output_map).fillna("❌").replace("", "❌")
+        # --- FIX IS HERE ---
+        # Simplified the groupby and separated the logic into a robust two-step process.
+        
+        # Step 3.1: Create a map of Input ID -> list of Output IDs
+        output_map = outputs.groupby('linked_input_id')['id'].apply(lambda x: ', '.join(x.astype(str)))
+        
+        # Step 3.2: Map the values to the matrix and fill missing links.
+        trace_matrix['Design Output'] = trace_matrix.index.map(output_map)
+        trace_matrix['Design Output'].fillna("❌", inplace=True)
+        # --- END OF FIX ---
     else:
         trace_matrix['Design Output'] = "❌"
 
@@ -59,13 +67,9 @@ def render_traceability_matrix(ssm):
 
     # 6. Style the matrix for visual clarity
     def style_matrix(cell):
-        # Use a checkmark for better visual confirmation
         return 'color: #d62728; font-weight: bold;' if cell == "❌" else 'color: #2ca02c;'
 
-    # --- FIX IS HERE ---
-    # Replaced deprecated .applymap() with the modern .map()
     st.dataframe(trace_matrix.style.map(style_matrix, subset=['Design Output', 'Verification', 'Validation']), use_container_width=True)
-    # --- END OF FIX ---
     
     # Add an export button
     csv = trace_matrix.to_csv().encode('utf-8')
