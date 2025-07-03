@@ -27,17 +27,15 @@ def render_traceability_matrix(ssm):
     trace_matrix.set_index('id', inplace=True)
 
     # 3. Map Outputs to Inputs
-    if not outputs.empty:
-        output_map = outputs.groupby('linked_input_id')['id'].apply(list).apply(lambda x: ', '.join(x))
-        trace_matrix['Design Output'] = trace_matrix.index.map(output_map).fillna("❌")
+    if not outputs.empty and 'linked_input_id' in outputs.columns and 'id' in outputs.columns:
+        output_map = outputs.groupby('linked_input_id')['id'].apply(lambda x: ', '.join(x) if x.any() else "❌")
+        trace_matrix['Design Output'] = trace_matrix.index.map(output_map).fillna("❌").replace("", "❌")
     else:
         trace_matrix['Design Output'] = "❌"
 
     # 4. Map Verification to Outputs (and by extension, to Inputs)
-    if not verifications.empty and not outputs.empty:
-        # Create a map from Output ID -> Verification ID
+    if not verifications.empty and not outputs.empty and 'output_verified' in verifications.columns and 'linked_input_id' in outputs.columns:
         ver_map = verifications.groupby('output_verified')['id'].apply(list).apply(lambda x: ', '.join(x))
-        # Map this back to the matrix using the already linked outputs
         output_to_input_map = outputs.set_index('id')['linked_input_id']
         input_to_ver_map = {}
         for output_id, ver_ids in ver_map.items():
@@ -51,9 +49,8 @@ def render_traceability_matrix(ssm):
         trace_matrix['Verification'] = "❌"
         
     # 5. Map Validation to User Needs
-    if not validations.empty:
+    if not validations.empty and 'user_need_validated' in validations.columns:
         val_map = validations.groupby('user_need_validated')['id'].apply(list).apply(lambda x: ', '.join(x))
-        # Only apply this map to rows that are User Needs
         is_user_need = trace_matrix['source_type'] == 'User Need'
         trace_matrix.loc[is_user_need, 'Validation'] = trace_matrix[is_user_need].index.map(val_map)
         trace_matrix['Validation'].fillna("❌", inplace=True)
@@ -62,9 +59,13 @@ def render_traceability_matrix(ssm):
 
     # 6. Style the matrix for visual clarity
     def style_matrix(cell):
-        return 'color: red' if cell == "❌" else 'color: green'
+        # Use a checkmark for better visual confirmation
+        return 'color: #d62728; font-weight: bold;' if cell == "❌" else 'color: #2ca02c;'
 
-    st.dataframe(trace_matrix.style.applymap(style_matrix, subset=['Design Output', 'Verification', 'Validation']), use_container_width=True)
+    # --- FIX IS HERE ---
+    # Replaced deprecated .applymap() with the modern .map()
+    st.dataframe(trace_matrix.style.map(style_matrix, subset=['Design Output', 'Verification', 'Validation']), use_container_width=True)
+    # --- END OF FIX ---
     
     # Add an export button
     csv = trace_matrix.to_csv().encode('utf-8')
