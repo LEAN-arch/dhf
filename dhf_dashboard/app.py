@@ -1,8 +1,7 @@
 # File: dhf_dashboard/app.py
-# SME Note: This is the definitive, professional-grade version. It includes the robust
-# path correction block, the refined UI, and a "Design Controls Guide" tab that is
-# now fully expanded with detailed information tailored to a Senior Design Assurance
-# Quality Engineer role, referencing key responsibilities like TMV and statistical rationale.
+# SME Note: This is the definitive, all-inclusive version. It includes the robust
+# path correction block, the refined UI, and a fully expanded "Design Controls Guide"
+# with details on key ISO standards, CFR parts, and Quality Engineering responsibilities.
 
 import sys
 import os
@@ -221,10 +220,10 @@ with tab4:
         - **Process:** It defines a lifecycle approach: identify hazards, estimate and evaluate risks, implement controls, and monitor the effectiveness of those controls.
         - **Role in this App:** The **"2. Risk Management"** section of the DHF Explorer is a direct implementation of the documentation required by ISO 14971.
         """)
-    
+
     st.divider()
 
-    # --- NEW CONTENT TAILORED TO THE SENIOR QUALITY ENGINEER ROLE ---
+    # --- CONTENT TAILORED TO THE SENIOR QUALITY ENGINEER ROLE ---
     st.subheader("The Role of a Design Assurance Quality Engineer")
     st.markdown("A Design Assurance QE is the steward of the DHF, ensuring compliance, quality, and safety are designed into the product from day one. This tool is designed to be their primary workspace. Key responsibilities within this framework include:")
 
@@ -266,6 +265,7 @@ with tab4:
          """)
 
     st.divider()
+
     st.subheader("Visualizing the Process: The V-Model")
     st.markdown("The V-Model is a powerful way to visualize the Design Controls process, emphasizing the critical link between design (left side) and testing (right side).")
 
@@ -274,6 +274,25 @@ with tab4:
         st.image(v_model_image_path, caption="The V-Model illustrates the relationship between design decomposition and integration/testing.", use_container_width=True)
     else:
         st.error(f"Image Not Found: Ensure `v_model_diagram.png` is in the `{current_dir}` directory.", icon="🚨")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Left Side: Decomposition & Design")
+        st.markdown("""
+        Moving down the left side of the 'V' involves breaking down the high-level concept into detailed, buildable specifications.
+        - **User Needs & Intended Use:** What problem does the user need to solve?
+        - **Design Inputs (Requirements):** How must the device perform to meet those needs? This includes technical, functional, and safety requirements.
+        - **System & Architectural Design:** How will the components be structured to meet the requirements?
+        - **Detailed Design (Outputs):** At the lowest level, these are the final drawings, code, and specifications that are used to build the device.
+        """)
+    with col2:
+        st.subheader("Right Side: Integration & Testing")
+        st.markdown("""
+        Moving up the right side of the 'V' involves building the device from its components and testing at each level to ensure it matches the corresponding design phase on the left.
+        - **Unit/Component Verification:** Does each individual part meet its detailed design specification?
+        - **Integration & System Verification:** Do the assembled parts work together as defined in the architectural design?
+        - **Design Validation:** Does the final, complete device meet the high-level User Needs? This is the ultimate test.
+        """)
 
     st.success("""
     #### The Core Principle: Verification vs. Validation
