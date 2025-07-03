@@ -28,15 +28,12 @@ def render_traceability_matrix(ssm):
 
     # 3. Map Outputs to Inputs
     if not outputs.empty and 'linked_input_id' in outputs.columns and 'id' in outputs.columns:
-        # --- FIX IS HERE ---
-        # Simplified the groupby and separated the logic into a robust two-step process.
-        
-        # Step 3.1: Create a map of Input ID -> list of Output IDs
         output_map = outputs.groupby('linked_input_id')['id'].apply(lambda x: ', '.join(x.astype(str)))
-        
-        # Step 3.2: Map the values to the matrix and fill missing links.
         trace_matrix['Design Output'] = trace_matrix.index.map(output_map)
-        trace_matrix['Design Output'].fillna("❌", inplace=True)
+        
+        # --- FIX IS HERE ---
+        # Replaced the inplace operation on a chain with an explicit assignment.
+        trace_matrix['Design Output'] = trace_matrix['Design Output'].fillna("❌")
         # --- END OF FIX ---
     else:
         trace_matrix['Design Output'] = "❌"
@@ -61,7 +58,11 @@ def render_traceability_matrix(ssm):
         val_map = validations.groupby('user_need_validated')['id'].apply(list).apply(lambda x: ', '.join(x))
         is_user_need = trace_matrix['source_type'] == 'User Need'
         trace_matrix.loc[is_user_need, 'Validation'] = trace_matrix[is_user_need].index.map(val_map)
-        trace_matrix['Validation'].fillna("❌", inplace=True)
+        
+        # --- FIX IS HERE ---
+        # Replaced the second inplace operation on a chain with an explicit assignment.
+        trace_matrix['Validation'] = trace_matrix['Validation'].fillna("❌")
+        # --- END OF FIX ---
     else:
         trace_matrix['Validation'] = "❌"
 
