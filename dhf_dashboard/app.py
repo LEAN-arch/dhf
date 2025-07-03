@@ -98,18 +98,12 @@ with tab1:
     outputs_df = pd.DataFrame(ssm.get_data("design_outputs", "documents"))
     traced_inputs = 0
     
-    # --- FIX IS HERE ---
-    # The condition is now more robust. It checks that the DataFrames are not empty
-    # AND that they contain the necessary columns before attempting to access them.
-    # This prevents a KeyError when the app first starts.
     if not inputs_df.empty and 'id' in inputs_df.columns and not outputs_df.empty and 'linked_input_id' in outputs_df.columns:
-        # We also drop NA values from the linking column to be safe
         linked_ids = outputs_df['linked_input_id'].dropna()
         traced_inputs = inputs_df['id'].isin(linked_ids).sum()
         
     coverage = (traced_inputs / len(inputs_df)) * 100 if not inputs_df.empty else 0
     col4.metric("Input→Output Trace Coverage", f"{coverage:.1f}%", help="Percentage of design inputs that have at least one design output linked to them.")
-    # --- END OF FIX ---
 
     st.divider()
     st.header("Project Timeline and Critical Path")
@@ -135,8 +129,9 @@ with tab2:
         render_action_item_tracker(ssm)
 
 # ======================================================================================
-# --- TAB 3: DHF STRUCTURE (V-Model) ---
+# --- TAB 3: DHF STRUCTURE (V-Model) --- FIX IS HERE ---
 # ======================================================================================
+# The content for this tab has been restored.
 with tab3:
     st.header("The Design Control Process (V-Model)")
     st.image("https://www.researchgate.net/profile/Tor-Staalhane/publication/277005111/figure/fig1/AS:669443530891271@1536619171887/The-V-model-of-development-and-testing.png",
@@ -146,6 +141,7 @@ with tab3:
 
     For software-driven devices like this smart-pill, the V-Model is augmented by processes from **IEC 62304** (Software Lifecycle Processes) and **IEC 62366** (Usability Engineering), ensuring rigor in both software development and user interface design.
     """)
+# --- END OF FIX ---
 
 # ======================================================================================
 # --- TAB 4: DHF SECTION DETAILS ---
