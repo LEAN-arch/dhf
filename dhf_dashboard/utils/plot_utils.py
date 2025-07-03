@@ -4,7 +4,6 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 
-# ... (other plotting functions are unchanged) ...
 def create_progress_donut(completion_pct: float):
     fig = go.Figure(go.Indicator(mode="gauge+number", value=completion_pct, title={'text': "<b>Overall Project Progress</b>"}, number={'suffix': "%"}, gauge={'axis': {'range': [None, 100]},'bar': {'color': "#2ca02c"}}))
     fig.update_layout(height=250, margin=dict(l=10, r=10, t=50, b=10))
@@ -27,7 +26,6 @@ def create_action_item_chart(actions_df: pd.DataFrame):
     fig = px.bar(workload, title="<b>Open Action Items by Owner & Status</b>")
     fig.update_layout(barmode='stack', title_x=0.5)
     return fig
-# --- END of unchanged functions ---
 
 def create_gantt_chart(tasks_df: pd.DataFrame):
     """
@@ -48,14 +46,13 @@ def create_gantt_chart(tasks_df: pd.DataFrame):
         color_discrete_map="identity"
     )
 
-    # --- FIX IS HERE: Use the correct properties for marker line styling ---
+    # DEFINITIVE FIX: Use the correct, separate properties for marker line styling.
     fig.update_traces(
         text=tasks_df['display_text'],
         textposition='inside',
-        marker_line_color=tasks_df['line_color'], # Correct property for line color
-        marker_line_width=tasks_df['line_width']  # Correct property for line width
+        marker_line_color=tasks_df['line_color'],
+        marker_line_width=tasks_df['line_width']
     )
-    # --- END OF FIX ---
     
     fig.update_layout(
         showlegend=False,
