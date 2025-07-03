@@ -1,10 +1,24 @@
 # File: dhf_dashboard/app.py
 
-import streamlit as st
-import pandas as pd
+# --- SME DEFINITIVE FIX: ENVIRONMENT AND PATH CORRECTION ---
+# This block of code MUST be at the very top of the file, before any other imports.
+import sys
 import os
 
-# --- EXPLICIT, ABSOLUTE IMPORTS ---
+# Get the absolute path of the directory containing this script (dhf_dashboard)
+current_dir = os.path.dirname(os.path.abspath(__file__))
+# Get the absolute path of the parent directory (the one containing dhf_dashboard)
+parent_dir = os.path.dirname(current_dir)
+
+# Add the parent directory to Python's system path
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+# --- END OF DEFINITIVE FIX ---
+
+import streamlit as st
+import pandas as pd
+
+# --- EXPLICIT, ABSOLUTE IMPORTS (will now work correctly) ---
 from dhf_dashboard.utils.session_state_manager import SessionStateManager
 from dhf_dashboard.utils.plot_utils import (
     create_gantt_chart, 
@@ -31,8 +45,6 @@ st.set_page_config(
 ssm = SessionStateManager()
 
 # --- SME FIX: ROBUST DATA LOADING & SANITIZATION ---
-# Load all data into DataFrames at the top and sanitize them once.
-# This prevents crashes from data type mismatches later in the app.
 try:
     tasks_df = pd.DataFrame(ssm.get_data("project_management", "tasks"))
     if not tasks_df.empty:
@@ -42,7 +54,6 @@ try:
 
     hazards_df = pd.DataFrame(ssm.get_data("risk_management_file", "hazards"))
     
-    # Aggregate all action items from different sources
     all_actions = []
     reviews_data = ssm.get_data("design_reviews", "reviews")
     if reviews_data:
@@ -58,7 +69,7 @@ try:
 except Exception as e:
     st.error(f"An error occurred while loading and processing data: {e}")
     st.warning("Cannot render dashboard. Please check data integrity or reset session.")
-    st.stop() # Halt execution if data is critically corrupted
+    st.stop()
 
 # --- Main App Title ---
 st.title("🚀 DHF Command Center: Smart-Pill Combination Product")
