@@ -1,7 +1,7 @@
 # File: dhf_dashboard/app.py
-# SME Note: This is the definitive, all-inclusive, and untruncated version. It includes the robust
-# path correction block, the professional-grade QE dashboard, all educational content in its full
-# unabridged form, and all bug fixes and feature enhancements.
+# SME Note: This is the definitive, corrected version. It fixes the Plotly ValueError
+# by correctly constructing and applying a discrete colorscale to the Risk Migration
+# Matrix, ensuring the visualization renders as intended.
 
 import sys
 import os
@@ -12,9 +12,6 @@ import plotly.express as px
 import numpy as np
 
 # --- ROBUST PATH CORRECTION BLOCK ---
-# This is the definitive fix for the ModuleNotFoundError.
-# It finds the project's root directory (the one containing 'dhf_dashboard')
-# and adds it to Python's search path.
 try:
     current_file_path = os.path.abspath(__file__)
     current_dir = os.path.dirname(current_file_path)
@@ -100,58 +97,71 @@ def render_enhanced_risk_matrix(ssm):
     st.markdown("**Interactive Risk Migration Matrix**")
     st.caption("This matrix shows how risks have moved from their initial state to their residual state after mitigation. Hover over any cell for details.")
 
-    # 1. Define the risk matrix structure and colors
+    # 1. Define the risk matrix structure, levels, and colors
     risk_config = {
         'levels': { (1,1):'Low', (1,2):'Low', (1,3):'Medium', (1,4):'Medium', (1,5):'High',
                     (2,1):'Low', (2,2):'Low', (2,3):'Medium', (2,4):'High', (2,5):'High',
                     (3,1):'Medium', (3,2):'Medium', (3,3):'High', (3,4):'High', (3,5):'Unacceptable',
                     (4,1):'Medium', (4,2):'High', (4,3):'High', (4,4):'Unacceptable', (4,5):'Unacceptable',
                     (5,1):'High', (5,2):'High', (5,3):'Unacceptable', (5,4):'Unacceptable', (5,5):'Unacceptable' },
-        'colors': { 'Unacceptable': '#8B0000', 'High': '#d62728', 'Medium': '#ff7f0e', 'Low': '#2ca02c' }
+        'colors': { 'Unacceptable': '#8B0000', 'High': '#d62728', 'Medium': '#ff7f0e', 'Low': '#2ca02c' },
+        'values': { 'Unacceptable': 3, 'High': 2, 'Medium': 1, 'Low': 0 }
     }
 
-    # 2. Prepare data pivots for counts and hover text
+    # 2. Prepare data for plotting
     initial_counts = df.pivot_table(index='initial_S', columns='initial_O', aggfunc='size', fill_value=0)
     final_counts = df.pivot_table(index='final_S', columns='final_O', aggfunc='size', fill_value=0)
     initial_ids = df.groupby(['initial_S', 'initial_O'])['hazard_id'].apply(lambda x: '<br>'.join(x)).reset_index()
     final_ids = df.groupby(['final_S', 'final_O'])['hazard_id'].apply(lambda x: '<br>'.join(x)).reset_index()
 
-    # 3. Create the figure and add a heatmap for background colors
-    fig = go.Figure()
     s_range = range(1, 6)
     o_range = range(1, 6)
-    z_colors = [[risk_config['colors'].get(risk_config['levels'].get((s, o)), '#F0F0F0') for o in o_range] for s in s_range]
     
-    fig.add_trace(go.Heatmap(z=np.zeros((5,5)), x=list(o_range), y=list(s_range),
-                             colorscale=z_colors, showscale=False, hoverinfo='none'))
-
-    # 4. Add annotations and custom hover data
+    # 3. Create the numerical z-matrix for colors and text annotations
+    z_matrix = []
     annotations = []
     hover_texts = []
     for s in s_range:
+        z_row = []
         hover_row = []
         for o in o_range:
+            level_name = risk_config['levels'].get((s,o), 'Low')
+            z_row.append(risk_config['values'][level_name])
+            
             i_count = initial_counts.get(o, {}).get(s, 0)
             f_count = final_counts.get(o, {}).get(s, 0)
-            
-            i_id_text_series = initial_ids.loc[(initial_ids['initial_S'] == s) & (initial_ids['initial_O'] == o), 'hazard_id']
-            i_id_text = i_id_text_series.iloc[0] if not i_id_text_series.empty else 'None'
-            
-            f_id_text_series = final_ids.loc[(final_ids['final_S'] == s) & (final_ids['final_O'] == o), 'hazard_id']
-            f_id_text = f_id_text_series.iloc[0] if not f_id_text_series.empty else 'None'
-            
+
             if i_count > 0 or f_count > 0:
-                current_level = risk_config['levels'].get((s,o))
-                font_color = 'white' if current_level in ['High', 'Unacceptable'] else 'black'
+                font_color = 'white' if level_name in ['High', 'Unacceptable'] else 'black'
                 annotations.append(dict(x=o, y=s, text=f"Initial: {i_count}<br>Residual: {f_count}",
-                                        showarrow=False, font=dict(color=font_color)))
+                                        showarrow=False, font=dict(color=font_color, size=10)))
             
-            hover_row.append(f"<b>Risk Level: {risk_config['levels'].get((s,o))}</b><br><br><b>Initial Risks Here:</b><br>{i_id_text}<br><br><b>Residual Risks Here:</b><br>{f_id_text}")
+            i_id_text = initial_ids.loc[(initial_ids['initial_S'] == s) & (initial_ids['initial_O'] == o), 'hazard_id'].values
+            i_id_text = i_id_text[0] if len(i_id_text) > 0 else 'None'
+            f_id_text = final_ids.loc[(final_ids['final_S'] == s) & (final_ids['final_O'] == o), 'hazard_id'].values
+            f_id_text = f_id_text[0] if len(f_id_text) > 0 else 'None'
+            hover_row.append(f"<b>Risk Level: {level_name}</b><br><br><b>Initial Risks Here:</b><br>{i_id_text}<br><br><b>Residual Risks Here:</b><br>{f_id_text}")
+        z_matrix.append(z_row)
         hover_texts.append(hover_row)
 
-    fig.add_trace(go.Heatmap(z=np.zeros((5,5)), x=list(o_range), y=list(s_range),
-                             opacity=0, customdata=hover_texts,
-                             hovertemplate='<b>Severity</b>: %{y}<br><b>Occurrence</b>: %{x}<br>%{customdata}<extra></extra>'))
+    # 4. Create the discrete colorscale mapping
+    colorscale = [
+        [0, risk_config['colors']['Low']],
+        [0.33, risk_config['colors']['Medium']],
+        [0.66, risk_config['colors']['High']],
+        [1, risk_config['colors']['Unacceptable']]
+    ]
+    
+    # 5. Create the heatmap figure
+    fig = go.Figure(data=go.Heatmap(
+                   z=z_matrix,
+                   x=list(o_range),
+                   y=list(s_range),
+                   colorscale=colorscale,
+                   showscale=False,
+                   customdata=hover_texts,
+                   hovertemplate='<b>Severity</b>: %{y}<br><b>Occurrence</b>: %{x}<br>%{customdata}<extra></extra>'
+                   ))
 
     fig.update_layout(
         title="Risk Migration Matrix (Initial vs. Residual)",
