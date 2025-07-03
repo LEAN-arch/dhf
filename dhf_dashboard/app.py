@@ -1,26 +1,22 @@
-# File: app.py
-# SME Note: This is the definitive, fully refactored version. It acts as an orchestrator,
-# leveraging modular components for plotting, data management, and DHF section rendering.
+# File: app.py (This file should be in your project root, NOT inside dhf_dashboard)
 
-# --- ENVIRONMENT AND PATH CORRECTION (Failsafe) ---
-import sys
-import os
 import pandas as pd
 import streamlit as st
 
 # --- MODULAR IMPORTS FROM THE PROJECT PACKAGE ---
-# SME Rationale: Using relative imports to fix ModuleNotFoundError
-from utils.session_state_manager import SessionStateManager
-from utils.critical_path_utils import find_critical_path
-from utils.plot_utils import (
+# SME Rationale: With app.py outside the package, we now use absolute imports
+# from the 'dhf_dashboard' package. This is the standard, correct way.
+from dhf_dashboard.utils.session_state_manager import SessionStateManager
+from dhf_dashboard.utils.critical_path_utils import find_critical_path
+from dhf_dashboard.utils.plot_utils import (
     create_progress_donut, create_risk_profile_chart,
     create_gantt_chart, create_action_item_chart
 )
-from analytics.traceability_matrix import render_traceability_matrix
-from analytics.action_item_tracker import render_action_item_tracker
+from dhf_dashboard.analytics.traceability_matrix import render_traceability_matrix
+from dhf_dashboard.analytics.action_item_tracker import render_action_item_tracker
 
 # Import all DHF section rendering functions
-from dhf_sections import (
+from dhf_dashboard.dhf_sections import (
     design_plan, design_risk_management, human_factors, design_inputs,
     design_outputs, design_reviews, design_verification, design_validation,
     design_transfer, design_changes
@@ -30,6 +26,7 @@ from dhf_sections import (
 st.set_page_config(layout="wide", page_title="DHF Command Center", page_icon="🚀")
 
 # --- INITIALIZE SESSION STATE ---
+# The SessionStateManager class itself does not need any changes.
 ssm = SessionStateManager()
 
 # --- DATA PREPARATION PIPELINE (CRASH-PROOF) ---
