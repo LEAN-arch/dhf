@@ -1,4 +1,4 @@
-# File: dhf_dashboard/utils/session_state_manager.py# File: dhf_dashboard/utils/session_state_manager.py
+# File: dhf_dashboard/utils/session_state_manager.py
 # SME Note: This is the definitive, fully populated, and untruncated data model.
 # It contains complete data for every section to ensure a full "out-of-the-box" experience
 # with all features and visualizations fully active.
@@ -28,7 +28,7 @@ class SessionStateManager:
                 "data_version": CURRENT_DATA_VERSION,
                 "design_plan": {
                     "project_name": "Smart-Pill Drug Delivery System (SP-DDS)",
-                    "scope": "This project covers the design and development of a new combination product, the 'Smart-Pill', intended for the targeted oral delivery of drug XYZ for treating chronic condition ABC. The system comprises a swallowable electronic capsule (device) containing a payload of drug XYZ (drug), a companion mobile application for monitoring, and a cloud-based data backend.",
+                    "scope": "This project covers the design and development of a new combination product, the 'Smart-Pill', intended for the targeted oral delivery of drug XYZ for treating chronic condition ABC. The system comprises a swallowable electronic capsule (device) containing a payload of drug XYZ (drug), a companion mobile application for monitoring, and a cloud-based data backend for physician review.",
                     "team_members": [
                         {"role": "Project Lead", "name": "Dr. Alice Weber", "responsibility": "Overall project oversight and final DHF approval."},
                         {"role": "Device Engineer", "name": "Bob Chen", "responsibility": "Hardware design, material selection, and mechanical testing."},
@@ -124,7 +124,15 @@ class SessionStateManager:
                         "batch_record_review": {"total": 5, "passed": 4, "failed": 1}
                     },
                     "spc_data": {"target": 7.95, "usl": 8.00, "lsl": 7.90, "measurements": np.random.normal(7.95, 0.02, 50).tolist()},
-                    "hypothesis_testing_data": {"line_a": np.random.normal(99.8, 0.2, 30).tolist(), "line_b": np.random.normal(99.9, 0.15, 30).tolist()}
+                    "hypothesis_testing_data": {"line_a": np.random.normal(99.8, 0.2, 30).tolist(), "line_b": np.random.normal(99.9, 0.15, 30).tolist()},
+                    "doe_data": [
+                        {"run": 1, "temperature": -1, "pressure": -1, "seal_strength": 80.5},
+                        {"run": 2, "temperature": 1, "pressure": -1, "seal_strength": 90.2},
+                        {"run": 3, "temperature": -1, "pressure": 1, "seal_strength": 82.1},
+                        {"run": 4, "temperature": 1, "pressure": 1, "seal_strength": 94.8},
+                        {"run": 5, "temperature": 0, "pressure": 0, "seal_strength": 85.3},
+                        {"run": 6, "temperature": 0, "pressure": 0, "seal_strength": 85.9},
+                    ]
                 },
                 "project_management": {
                     "tasks": [
