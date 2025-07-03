@@ -1,7 +1,7 @@
 # File: dhf_dashboard/app.py
-# SME Note: This is the definitive, fully functional version. It includes the robust
-# path correction block, the professional QE dashboard, all educational content,
-# and an enhanced risk heatmap with detailed hover text.
+# SME Note: This is the definitive, all-inclusive, and untruncated version. It includes the robust
+# path correction block, the professional-grade QE dashboard, all educational content,
+# and small enhancements for feature discoverability based on user feedback.
 
 import sys
 import os
@@ -12,6 +12,9 @@ import plotly.express as px
 import numpy as np
 
 # --- ROBUST PATH CORRECTION BLOCK ---
+# This is the definitive fix for the ModuleNotFoundError.
+# It finds the project's root directory (the one containing 'dhf_dashboard')
+# and adds it to Python's search path.
 try:
     current_file_path = os.path.abspath(__file__)
     current_dir = os.path.dirname(current_file_path)
@@ -63,8 +66,7 @@ def render_design_control_tracker(ssm):
                         st.markdown(f"- **{team}:** <span style='color:{color};'>{status}</span>", unsafe_allow_html=True)
                 else:
                     st.caption("Sign-off data is not in the correct format.")
-    st.caption("This tracker provides a live view of the DHF's completeness and the project's adherence to the design plan.")
-
+    st.info("This tracker provides a live view of DHF completeness for gate review readiness. The overall project timeline is shown in the Gantt Chart at the bottom of this dashboard.", icon="💡")
 
 def render_risk_management_dashboard(ssm):
     st.subheader("2. Risk Management Dashboard (ISO 14971, ICH Q9)")
@@ -95,24 +97,16 @@ def render_risk_management_dashboard(ssm):
 
     st.markdown("**Residual Risk Heatmap (Severity vs. Occurrence)**")
     
-    # --- ENHANCEMENT FOR DETAILED HOVER TEXT ---
     heatmap_data = df.pivot_table(index='final_S', columns='final_O', aggfunc='size', fill_value=0)
-    
-    # Create hover text by aggregating hazard IDs for each cell
     hover_text_data = df.groupby(['final_S', 'final_O'])['hazard_id'].apply(lambda x: '<br>'.join(x)).reset_index()
     hover_pivot = hover_text_data.pivot_table(index='final_S', columns='final_O', values='hazard_id', aggfunc='first', fill_value="")
 
-    # Ensure both pivots have the same 5x5 structure
     heatmap_data = heatmap_data.reindex(index=range(5, 0, -1), columns=range(1, 6), fill_value=0)
     hover_pivot = hover_pivot.reindex(index=range(5, 0, -1), columns=range(1, 6), fill_value="No risks")
 
     fig = go.Figure(data=go.Heatmap(
-                   z=heatmap_data.values,
-                   x=heatmap_data.columns,
-                   y=heatmap_data.index,
-                   hoverongaps=False,
-                   colorscale='Reds',
-                   customdata=hover_pivot.values,
+                   z=heatmap_data.values, x=heatmap_data.columns, y=heatmap_data.index,
+                   hoverongaps=False, colorscale='Reds', customdata=hover_pivot.values,
                    hovertemplate='<b>Severity</b>: %{y}<br><b>Occurrence</b>: %{x}<br><b>Count</b>: %{z}<br><b>Hazard IDs</b>:<br>%{customdata}<extra></extra>'
                    ))
     fig.update_layout(title="Count of Residual Risks (Hover for Details)", yaxis_title="Severity", xaxis_title="Occurrence")
@@ -135,11 +129,11 @@ def render_vv_readiness_panel(ssm):
 
     st.markdown("**Protocol Status & Traceability**")
     st.dataframe(protocols, use_container_width=True, column_config={
-        "name": "Protocol Name",
+        "name": "Protocol Name", "status": "Status",
         "tmv_status": st.column_config.SelectboxColumn("TMV Status", options=["N/A", "Required", "Completed"]),
         "risk_control_verified_id": "Linked Risk Control ID"
     })
-    st.info("💡 Usability testing protocols (IEC 62366) should be included here and linked to Human Factors analysis.", icon="💡")
+    st.info("💡 This panel is a key input for the V&V Gate Review. Full completion and traceability are required to proceed.", icon="💡")
 
 def render_audit_readiness_scorecard(ssm):
     st.subheader("4. Audit & Inspection Readiness Scorecard")
@@ -247,6 +241,35 @@ with tab1:
     render_audit_readiness_scorecard(ssm)
     st.divider()
     render_continuous_improvement_dashboard(ssm)
+    
+    st.divider()
+    st.header("Project Timeline (Gantt Chart)")
+    if not tasks_df_processed.empty:
+        gantt_fig = go.Figure(px.timeline(
+            tasks_df_processed, x_start="start_date", x_end="end_date", y="name",
+            color="color", color_discrete_map="identity"
+        ))
+        gantt_fig.update_traces(
+            text=tasks_df_processed['display_text'], textposition='inside', insidetextanchor='middle',
+            marker_line_color=tasks_df_processed['line_color'], marker_line_width=tasks_df_processed['line_width']
+        )
+        gantt_fig.update_layout(
+            showlegend=False, title_x=0.5, xaxis_title="Date", yaxis_title="DHF Phase",
+            yaxis_categoryorder='array', yaxis_categoryarray=tasks_df_processed.sort_values("start_date", ascending=False)["name"].tolist()
+        )
+        st.plotly_chart(gantt_fig, use_container_width=True)
+        legend_html = """
+        <div style="padding: 10px; border: 1px solid #ddd; border-radius: 5px; margin-top: 15px; font-size: 0.9em;">
+        <b>Legend:</b>
+        <ul style="list-style-type: none; padding-left: 0; margin-top: 5px; column-count: 2;">
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#2ca02c; margin-right: 8px; vertical-align: middle;"></span> Completed</li>
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#1f77b4; margin-right: 8px; vertical-align: middle;"></span> In Progress</li>
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#d62728; margin-right: 8px; vertical-align: middle;"></span> At Risk</li>
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:15px; height:15px; background-color:#7f7f7f; margin-right: 8px; vertical-align: middle;"></span> Not Started</li>
+            <li style="margin-bottom: 5px;"><span style="display:inline-block; width:11px; height:11px; border: 2px solid red; margin-right: 8px; vertical-align: middle;"></span> Task on Critical Path</li>
+        </ul></div>
+        """
+        st.markdown(legend_html, unsafe_allow_html=True)
 
 # ==============================================================================
 # TAB 2: DHF EXPLORER
