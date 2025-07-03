@@ -1,7 +1,7 @@
 # File: dhf_dashboard/app.py
 # SME Note: This is the definitive, fully enhanced version. It replaces the previous
-# risk matrix with a professional-grade, intuitive "Risk Storyboard Matrix" that
-# provides the full context for each risk journey directly on the chart.
+# risk matrix with a professional-grade, intuitive "Risk Mitigation Flow" (Sankey Diagram)
+# that provides the clearest possible story of risk reduction.
 
 import sys
 import os
@@ -65,9 +65,9 @@ def render_design_control_tracker(ssm):
                     st.caption("Sign-off data is not in the correct format.")
     st.info("This tracker provides a live view of DHF completeness for gate review readiness. The overall project timeline is shown in the Gantt Chart at the bottom of this dashboard.", icon="💡")
 
-def render_risk_storyboard_matrix(ssm):
+def render_risk_mitigation_flow_chart(ssm):
     st.subheader("2. Risk Management Dashboard (ISO 14971, ICH Q9)")
-    st.markdown("Analyze the project's risk profile via an interactive Risk Storyboard Matrix, historical trends, and top risks.")
+    st.markdown("Analyze the project's risk profile via an interactive Risk Mitigation Flow, historical trends, and top risks.")
     hazards_data = ssm.get_data("risk_management_file", "hazards")
     historical_rpn = pd.DataFrame(ssm.get_data("risk_management_file", "historical_rpn"))
 
@@ -93,76 +93,65 @@ def render_risk_storyboard_matrix(ssm):
             st.plotly_chart(fig_line, use_container_width=True)
     st.divider()
 
-    # --- Optimal "Risk Storyboard Matrix" ---
-    st.markdown("**Interactive Risk Storyboard Matrix**")
-    st.caption("Each card shows a risk's journey from its initial to its final position. The background color indicates the final risk level.")
+    # --- Optimal "Risk Mitigation Flow" (Sankey Diagram) ---
+    st.markdown("**Interactive Risk Mitigation Flow**")
+    st.caption("This diagram visualizes the journey of all risks from their initial to residual states, showing the effectiveness of mitigation efforts.")
 
-    # 1. Define the risk matrix configuration
     risk_config = {
         'levels': { (1,1):'Low', (1,2):'Low', (1,3):'Medium', (1,4):'Medium', (1,5):'High',
                     (2,1):'Low', (2,2):'Low', (2,3):'Medium', (2,4):'High', (2,5):'High',
                     (3,1):'Medium', (3,2):'Medium', (3,3):'High', (3,4):'High', (3,5):'Unacceptable',
                     (4,1):'Medium', (4,2):'High', (4,3):'High', (4,4):'Unacceptable', (4,5):'Unacceptable',
                     (5,1):'High', (5,2):'High', (5,3):'Unacceptable', (5,4):'Unacceptable', (5,5):'Unacceptable' },
-        'colors': { 'Unacceptable': '#8B0000', 'High': '#d62728', 'Medium': '#ff7f0e', 'Low': '#2ca02c' },
-        'values': { 'Unacceptable': 3, 'High': 2, 'Medium': 1, 'Low': 0 }
+        'colors': { 'Unacceptable': 'rgba(139, 0, 0, 0.8)', 'High': 'rgba(214, 39, 40, 0.8)', 'Medium': 'rgba(255, 127, 14, 0.8)', 'Low': 'rgba(44, 160, 44, 0.8)' }
     }
     
-    # 2. Engineer features for the visualization
     def get_level(s, o): return risk_config['levels'].get((s, o), 'Low')
-    df['initial_level_str'] = df.apply(lambda x: get_level(x['initial_S'], x['initial_O']), axis=1)
+    df['initial_level'] = df.apply(lambda x: get_level(x['initial_S'], x['initial_O']), axis=1)
+    df['final_level'] = df.apply(lambda x: get_level(x['final_S'], x['final_O']), axis=1)
     
-    # Create the "story card" for each risk
-    df['story_card'] = df.apply(
-        lambda x: (
-            f"<b>{x['hazard_id']}:</b> {x['description'][:30]}...<br>"
-            f"  Initial: {x['initial_level_str']} (S:{x['initial_S']}, O:{x['initial_O']}) ➞ Final: {get_level(x['final_S'], x['final_O'])} (S:{x['final_S']}, O:{x['final_O']})<br>"
-            f"  RPN: {x['initial_rpn']} ➞ {x['final_rpn']}"
-        ), axis=1)
-    
-    # 3. Aggregate data for plotting
-    cell_text = df.groupby(['final_S', 'final_O'])['story_card'].apply(lambda x: '<br><hr>'.join(x)).reset_index()
-    cell_counts = df.groupby(['final_S', 'final_O']).size().reset_index(name='count')
-    
-    # 4. Create the background heatmap
-    s_range, o_range = range(1, 6), range(1, 6)
-    z_matrix = [[risk_config['values'][get_level(s, o)] for o in o_range] for s in s_range]
-    colorscale = [[0, '#e5f5e0'], [0.33, '#fff2e0'], [0.66, '#ffe5e5'], [1.0, '#f2d0d0']]
-    
-    fig = go.Figure(data=go.Heatmap(
-                   z=z_matrix, x=list(o_range), y=list(s_range),
-                   colorscale=colorscale, showscale=False, hoverinfo='none'))
-    
-    # 5. Add annotations for each cell
-    annotations = []
-    for _, row in cell_text.iterrows():
-        s, o, text = row['final_S'], row['final_O'], row['story_card']
-        level_name = get_level(s, o)
-        font_color = 'white' if level_name in ['High', 'Unacceptable'] else 'black'
-        annotations.append(dict(x=o, y=s, text=text, showarrow=False, align='left',
-                                font=dict(color='#333333', size=9),
-                                bordercolor='#cccccc', borderwidth=1, bgcolor='rgba(255, 255, 255, 0.7)'))
+    # 1. Prepare data for Sankey diagram
+    all_nodes = [f"Initial {level}" for level in ['Unacceptable', 'High', 'Medium', 'Low']] + \
+                [f"Residual {level}" for level in ['Unacceptable', 'High', 'Medium', 'Low']]
+    node_map = {name: i for i, name in enumerate(all_nodes)}
 
-    # Add a simplified hover layer
-    hover_z = np.full((5,5), fill_value=np.nan)
-    hover_text = [[f"<b>Risk Level: {get_level(s,o)}</b><br>Residual Risks in Cell: 0" for o in o_range] for s in s_range]
-    for _, row in cell_counts.iterrows():
-        hover_text[row['final_S']-1][row['final_O']-1] = f"<b>Risk Level: {get_level(row['final_S'], row['final_O'])}</b><br>Residual Risks in Cell: {row['count']}"
+    links = df.groupby(['initial_level', 'final_level', 'hazard_id']).size().reset_index(name='count')
     
-    fig.add_trace(go.Heatmap(z=hover_z, x=list(o_range), y=list(s_range),
-                             text=hover_text, texttemplate="%{text}", hoverinfo='none', showscale=False,
-                             colorscale=[[0,'rgba(0,0,0,0)'],[1,'rgba(0,0,0,0)']],
-                             ))
+    sankey_data = links.groupby(['initial_level', 'final_level']).agg(
+        count=('count', 'sum'),
+        hazards=('hazard_id', lambda x: ', '.join(x))
+    ).reset_index()
 
-    fig.update_layout(
-        title="Risk Storyboard Matrix",
-        xaxis_title="Occurrence (O)", yaxis_title="Severity (S)",
-        yaxis=dict(autorange='reversed', tickvals=list(s_range)),
-        xaxis=dict(tickvals=list(o_range)),
-        width=800, height=800, xaxis_side='top',
-        plot_bgcolor='white', annotations=annotations,
-        margin=dict(l=50, r=50, t=100, b=50)
-    )
+    source_nodes = [node_map[f"Initial {row['initial_level']}"] for _, row in sankey_data.iterrows()]
+    target_nodes = [node_map[f"Residual {row['final_level']}"] for _, row in sankey_data.iterrows()]
+    values = [row['count'] for _, row in sankey_data.iterrows()]
+    
+    # Define link colors based on the destination node
+    link_colors = [risk_config['colors'][row['final_level']] for _, row in sankey_data.iterrows()]
+    
+    # Create custom hover data
+    hover_text = [f"<b>{row['count']} risk(s)</b> moved from {row['initial_level']} to {row['final_level']}:<br>{row['hazards']}" for _, row in sankey_data.iterrows()]
+
+    # 2. Create the Sankey figure
+    fig = go.Figure(data=[go.Sankey(
+        node=dict(
+            pad=15,
+            thickness=20,
+            line=dict(color="black", width=0.5),
+            label=all_nodes,
+            color=[risk_config['colors'][name.split(' ')[1]] for name in all_nodes]
+        ),
+        link=dict(
+            source=source_nodes,
+            target=target_nodes,
+            value=values,
+            color=link_colors,
+            customdata=hover_text,
+            hovertemplate='%{customdata}<extra></extra>'
+        )
+    )])
+
+    fig.update_layout(title_text="Risk Mitigation Flow: Initial State vs. Residual State", font_size=12, height=500)
     st.plotly_chart(fig, use_container_width=True)
 
 def render_vv_readiness_panel(ssm):
@@ -287,7 +276,7 @@ with tab1:
 
     render_design_control_tracker(ssm)
     st.divider()
-    render_risk_storyboard_matrix(ssm)
+    render_risk_mitigation_flow_chart(ssm)
     st.divider()
     render_vv_readiness_panel(ssm)
     st.divider()
