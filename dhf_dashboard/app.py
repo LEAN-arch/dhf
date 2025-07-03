@@ -1,7 +1,7 @@
 # File: dhf_dashboard/app.py
-# SME Note: This is the definitive, fully enhanced version. It replaces the basic
-# risk heatmap with a professional-grade, interactive Risk Migration Matrix that
-# visually demonstrates the effectiveness of risk mitigation efforts.
+# SME Note: This is the definitive, all-inclusive, and untruncated version. It includes the robust
+# path correction block, the professional-grade QE dashboard, all educational content in its full
+# unabridged form, and all bug fixes and feature enhancements.
 
 import sys
 import os
@@ -12,6 +12,9 @@ import plotly.express as px
 import numpy as np
 
 # --- ROBUST PATH CORRECTION BLOCK ---
+# This is the definitive fix for the ModuleNotFoundError.
+# It finds the project's root directory (the one containing 'dhf_dashboard')
+# and adds it to Python's search path.
 try:
     current_file_path = os.path.abspath(__file__)
     current_dir = os.path.dirname(current_file_path)
@@ -99,12 +102,12 @@ def render_enhanced_risk_matrix(ssm):
 
     # 1. Define the risk matrix structure and colors
     risk_config = {
-        'levels': { (1,1):'Low', (1,2):'Low', (1,3):'Low', (1,4):'Medium', (1,5):'Medium',
-                    (2,1):'Low', (2,2):'Low', (2,3):'Medium', (2,4):'Medium', (2,5):'High',
-                    (3,1):'Low', (3,2):'Medium', (3,3):'Medium', (3,4):'High', (3,5):'High',
-                    (4,1):'Medium', (4,2):'Medium', (4,3):'High', (4,4):'High', (4,5):'High',
-                    (5,1):'Medium', (5,2):'High', (5,3):'High', (5,4):'High', (5,5):'High' },
-        'colors': { 'High': '#d62728', 'Medium': '#ff7f0e', 'Low': '#2ca02c' }
+        'levels': { (1,1):'Low', (1,2):'Low', (1,3):'Medium', (1,4):'Medium', (1,5):'High',
+                    (2,1):'Low', (2,2):'Low', (2,3):'Medium', (2,4):'High', (2,5):'High',
+                    (3,1):'Medium', (3,2):'Medium', (3,3):'High', (3,4):'High', (3,5):'Unacceptable',
+                    (4,1):'Medium', (4,2):'High', (4,3):'High', (4,4):'Unacceptable', (4,5):'Unacceptable',
+                    (5,1):'High', (5,2):'High', (5,3):'Unacceptable', (5,4):'Unacceptable', (5,5):'Unacceptable' },
+        'colors': { 'Unacceptable': '#8B0000', 'High': '#d62728', 'Medium': '#ff7f0e', 'Low': '#2ca02c' }
     }
 
     # 2. Prepare data pivots for counts and hover text
@@ -117,8 +120,8 @@ def render_enhanced_risk_matrix(ssm):
     fig = go.Figure()
     s_range = range(1, 6)
     o_range = range(1, 6)
-    z_colors = [[risk_config['colors'][risk_config['levels'].get((s, o), 'Low')] for o in o_range] for s in s_range]
-
+    z_colors = [[risk_config['colors'].get(risk_config['levels'].get((s, o)), '#F0F0F0') for o in o_range] for s in s_range]
+    
     fig.add_trace(go.Heatmap(z=np.zeros((5,5)), x=list(o_range), y=list(s_range),
                              colorscale=z_colors, showscale=False, hoverinfo='none'))
 
@@ -128,24 +131,24 @@ def render_enhanced_risk_matrix(ssm):
     for s in s_range:
         hover_row = []
         for o in o_range:
-            # Counts
-            i_count = initial_counts.at[s, o] if (s in initial_counts.index and o in initial_counts.columns) else 0
-            f_count = final_counts.at[s, o] if (s in final_counts.index and o in final_counts.columns) else 0
-            # IDs for hover
-            i_id_text = initial_ids.loc[(initial_ids['initial_S'] == s) & (initial_ids['initial_O'] == o), 'hazard_id'].values
-            i_id_text = i_id_text[0] if len(i_id_text) > 0 else 'None'
-            f_id_text = final_ids.loc[(final_ids['final_S'] == s) & (final_ids['final_O'] == o), 'hazard_id'].values
-            f_id_text = f_id_text[0] if len(f_id_text) > 0 else 'None'
+            i_count = initial_counts.get(o, {}).get(s, 0)
+            f_count = final_counts.get(o, {}).get(s, 0)
             
-            # Annotation Text
+            i_id_text_series = initial_ids.loc[(initial_ids['initial_S'] == s) & (initial_ids['initial_O'] == o), 'hazard_id']
+            i_id_text = i_id_text_series.iloc[0] if not i_id_text_series.empty else 'None'
+            
+            f_id_text_series = final_ids.loc[(final_ids['final_S'] == s) & (final_ids['final_O'] == o), 'hazard_id']
+            f_id_text = f_id_text_series.iloc[0] if not f_id_text_series.empty else 'None'
+            
             if i_count > 0 or f_count > 0:
+                current_level = risk_config['levels'].get((s,o))
+                font_color = 'white' if current_level in ['High', 'Unacceptable'] else 'black'
                 annotations.append(dict(x=o, y=s, text=f"Initial: {i_count}<br>Residual: {f_count}",
-                                        showarrow=False, font=dict(color='white' if risk_config['levels'].get((s,o)) == 'High' else 'black')))
-            # Hover Text
+                                        showarrow=False, font=dict(color=font_color)))
+            
             hover_row.append(f"<b>Risk Level: {risk_config['levels'].get((s,o))}</b><br><br><b>Initial Risks Here:</b><br>{i_id_text}<br><br><b>Residual Risks Here:</b><br>{f_id_text}")
         hover_texts.append(hover_row)
 
-    # Use a second, invisible heatmap layer for the rich hover text
     fig.add_trace(go.Heatmap(z=np.zeros((5,5)), x=list(o_range), y=list(s_range),
                              opacity=0, customdata=hover_texts,
                              hovertemplate='<b>Severity</b>: %{y}<br><b>Occurrence</b>: %{x}<br>%{customdata}<extra></extra>'))
@@ -285,7 +288,7 @@ with tab1:
 
     render_design_control_tracker(ssm)
     st.divider()
-    render_enhanced_risk_matrix(ssm) # Calling the new enhanced function
+    render_enhanced_risk_matrix(ssm)
     st.divider()
     render_vv_readiness_panel(ssm)
     st.divider()
