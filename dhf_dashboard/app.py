@@ -6,16 +6,17 @@ import sys
 import os
 
 # --- CRITICAL PATH CORRECTION ---
-# This is the robust solution to the ModuleNotFoundError.
-# It programmatically adds the parent directory (e.g., '/mount/src/dhf/') to the
-# system path. This allows Python to find the 'dhf_dashboard' package and its modules
-# regardless of where the streamlit command is executed.
+# This block programmatically adds the parent directory of this file's directory
+# (e.g., '/mount/src/dhf/') to the system path. This allows Python to find the
+# 'dhf_dashboard' package and its modules, resolving ModuleNotFoundError.
+# This MUST come before the project-specific imports.
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 
-# --- EXPLICIT, ABSOLUTE IMPORTS ---
-# Now that the path is set correctly, we use absolute imports starting from our
-# main package directory 'dhf_dashboard'. This is unambiguous and best practice.
+# --- EXPLICIT, CORRECTED IMPORTS ---
+# Each module is now imported on its own line. This is the direct fix for the
+# "ImportError: cannot import name..." and is the standard way to import
+# modules from within a package.
 
 # Import utilities
 from dhf_dashboard.utils.session_state_manager import SessionStateManager
@@ -26,11 +27,18 @@ from dhf_dashboard.utils.critical_path_utils import find_critical_path
 from dhf_dashboard.analytics.traceability_matrix import render_traceability_matrix
 from dhf_dashboard.analytics.action_item_tracker import render_action_item_tracker
 
-# Import all section rendering functions
-from dhf_dashboard.dhf_sections import (
-    design_plan, design_risk_management, human_factors, design_inputs, design_outputs,
-    design_reviews, design_verification, design_validation, design_transfer, design_changes
-)
+# Import all section rendering modules
+from dhf_dashboard.dhf_sections import design_plan
+from dhf_dashboard.dhf_sections import design_risk_management
+from dhf_dashboard.dhf_sections import human_factors
+from dhf_dashboard.dhf_sections import design_inputs
+from dhf_dashboard.dhf_sections import design_outputs
+from dhf_dashboard.dhf_sections import design_reviews
+from dhf_dashboard.dhf_sections import design_verification
+from dhf_dashboard.dhf_sections import design_validation
+from dhf_dashboard.dhf_sections import design_transfer
+from dhf_dashboard.dhf_sections import design_changes
+
 
 # --- Page Configuration (must be the first Streamlit command) ---
 st.set_page_config(
@@ -96,7 +104,6 @@ with tab1:
     st.divider()
     st.header("Project Timeline and Critical Path")
     
-    # Calculate and display Gantt chart with critical path
     if not tasks_df.empty:
         critical_path = find_critical_path(tasks_df)
         gantt_fig = create_gantt_chart(tasks_df, critical_path)
@@ -139,7 +146,6 @@ with tab4:
     
     with st.sidebar:
         st.header("DHF Section Navigation")
-        # List of all available pages for the user to select
         page_options = [
             "1. Design Plan", "2. Risk Management File", "3. Human Factors", "4. Design Inputs", "5. Design Outputs",
             "6. Design Reviews & Gates", "7. Design Verification", "8. Design Validation",
@@ -147,7 +153,6 @@ with tab4:
         ]
         selection = st.radio("Go to Section:", page_options)
 
-        # Helpful info box for users
         st.info("""
         **How to Use:**
         1. Navigate through sections using the radio buttons.
@@ -161,35 +166,32 @@ with tab4:
         """)
 
     # --- Page Routing Logic ---
-    # A dictionary to map the user's selection to the correct rendering function
     PAGES = {
-        "1. Design Plan": design_plan.render,
-        "2. Risk Management File": design_risk_management.render,
-        "3. Human Factors": human_factors.render,
-        "4. Design Inputs": design_inputs.render,
-        "5. Design Outputs": design_outputs.render,
-        "6. Design Reviews & Gates": design_reviews.render,
-        "7. Design Verification": design_verification.render,
-        "8. Design Validation": design_validation.render,
-        "9. Design Transfer": design_transfer.render,
-        "10. Design Changes": design_changes.render,
+        "1. Design Plan": design_plan,
+        "2. Risk Management File": design_risk_management,
+        "3. Human Factors": human_factors,
+        "4. Design Inputs": design_inputs,
+        "5. Design Outputs": design_outputs,
+        "6. Design Reviews & Gates": design_reviews,
+        "7. Design Verification": design_verification,
+        "8. Design Validation": design_validation,
+        "9. Design Transfer": design_transfer,
+        "10. Design Changes": design_changes,
     }
     
-    # Special handling for the Project Task Editor, which is a simple data editor
     if selection == "11. Project Task Editor":
         st.subheader("11. Project Timeline and Task Editor")
         st.warning("Directly edit project timelines, statuses, and dependencies. Changes here will impact the Gantt chart and critical path analysis.")
         tasks_list = ssm.get_data("project_management", "tasks")
         
-        # Use st.data_editor to provide a spreadsheet-like interface for editing tasks
         edited_tasks = st.data_editor(tasks_list, num_rows="dynamic", use_container_width=True)
         
-        # If the user made changes, save them back to the session state
         if edited_tasks != tasks_list:
             ssm.update_data(edited_tasks, "project_management", "tasks")
             st.success("Project tasks updated!")
-            st.rerun() # Rerun the app to immediately reflect changes on the dashboard
+            st.rerun()
     else:
-        # For all other selections, call the corresponding function from the PAGES dictionary
-        page_function = PAGES[selection]
-        page_function(ssm)
+        # Get the correct module object from the PAGES dictionary
+        page_module = PAGES[selection]
+        # Call the 'render' function within that module
+        page_module.render(ssm)
