@@ -109,12 +109,21 @@ with tab1:
     st.header("Project Timeline and Critical Path")
     
     if not tasks_df.empty:
+        # --- FIX IS HERE ---
+        # Robustly convert date columns to datetime objects before using them.
+        # This prevents crashes if the data in session_state is not in the correct format.
+        tasks_df['start_date'] = pd.to_datetime(tasks_df['start_date'])
+        tasks_df['end_date'] = pd.to_datetime(tasks_df['end_date'])
+        # --- END OF FIX ---
+
         critical_path = find_critical_path(tasks_df)
         gantt_fig = create_gantt_chart(tasks_df, critical_path)
         st.plotly_chart(gantt_fig, use_container_width=True)
         st.info("The **Critical Path** (tasks with a red border) represents the longest sequence of dependent tasks. Any delay in these tasks will delay the entire project.")
     else:
         st.warning("No project tasks found. Check the Project Task Editor.")
+
+# ... (rest of the file is unchanged) ...
 
 # ======================================================================================
 # --- TAB 2: ADVANCED ANALYTICS ---
@@ -129,9 +138,8 @@ with tab2:
         render_action_item_tracker(ssm)
 
 # ======================================================================================
-# --- TAB 3: DHF STRUCTURE (V-Model) --- FIX IS HERE ---
+# --- TAB 3: DHF STRUCTURE (V-Model) ---
 # ======================================================================================
-# The content for this tab has been restored.
 with tab3:
     st.header("The Design Control Process (V-Model)")
     st.image("https://www.researchgate.net/profile/Tor-Staalhane/publication/277005111/figure/fig1/AS:669443530891271@1536619171887/The-V-model-of-development-and-testing.png",
@@ -141,7 +149,6 @@ with tab3:
 
     For software-driven devices like this smart-pill, the V-Model is augmented by processes from **IEC 62304** (Software Lifecycle Processes) and **IEC 62366** (Usability Engineering), ensuring rigor in both software development and user interface design.
     """)
-# --- END OF FIX ---
 
 # ======================================================================================
 # --- TAB 4: DHF SECTION DETAILS ---
