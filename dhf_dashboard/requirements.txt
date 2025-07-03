@@ -1,3 +1,17 @@
-streamlit
-pandas
-plotly
+# DHF Command Center - Application Dependencies
+
+# Core application framework for building the interactive web app
+streamlit==1.33.0
+
+# Data manipulation and analysis, used extensively for dataframes
+pandas==2.2.1
+
+# Interactive plotting and visualizations (Gantt, Sankey, SPC, etc.)
+plotly==5.19.0
+
+# Fundamental package for numerical computation in Python
+# A core dependency for pandas and scipy
+numpy==1.26.4
+
+# Scientific computing library, used here for statistical hypothesis testing (t-test)
+scipy==1.12.0
