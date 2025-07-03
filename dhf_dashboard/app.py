@@ -1,7 +1,7 @@
 # File: dhf_dashboard/app.py
-# SME Rationale: This version includes a robust path-correction block at the top.
-# This makes the app runnable even when the script is located inside its own package,
-# which is the cause of the ModuleNotFoundError.
+# SME Note: This is the definitive, all-inclusive version. It includes a robust
+# path correction block, a refined UI using tabs, and a new, comprehensive
+# "Design Controls Guide" tab to provide essential regulatory context.
 
 import sys
 import os
@@ -13,13 +13,9 @@ import streamlit as st
 # It finds the project's root directory (the one containing 'dhf_dashboard')
 # and adds it to Python's search path.
 try:
-    # Get the absolute path of the current file (app.py)
     current_file_path = os.path.abspath(__file__)
-    # Get the directory containing the current file (dhf_dashboard)
     current_dir = os.path.dirname(current_file_path)
-    # Get the parent directory (the project root)
     project_root = os.path.dirname(current_dir)
-    # Add the project root to the system path if it's not already there
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
 except Exception as e:
@@ -28,8 +24,6 @@ except Exception as e:
 
 
 # --- MODULAR IMPORTS FROM THE PROJECT PACKAGE ---
-# These imports will now work correctly because the path correction
-# block has made the 'dhf_dashboard' package visible.
 from dhf_dashboard.utils.session_state_manager import SessionStateManager
 from dhf_dashboard.utils.critical_path_utils import find_critical_path
 from dhf_dashboard.utils.plot_utils import (
@@ -52,10 +46,7 @@ st.set_page_config(layout="wide", page_title="DHF Command Center", page_icon="�
 # --- INITIALIZE SESSION STATE ---
 ssm = SessionStateManager()
 
-# --- The rest of the file is identical to the last correct version ---
-# (No changes needed below this line)
-
-# --- DATA PREPARATION PIPELINE (CRASH-PROOF) ---
+# --- DATA PREPARATION PIPELINE ---
 try:
     tasks_df = pd.DataFrame(ssm.get_data("project_management", "tasks"))
     if not tasks_df.empty:
@@ -77,46 +68,25 @@ except Exception as e:
     st.error(f"FATAL ERROR during data preparation: {e}", icon="🚨")
     st.stop()
 
-# --- SIDEBAR NAVIGATION ---
-with st.sidebar:
-    st.title("🚀 DHF Command Center")
-    project_name = ssm.get_data("design_plan", "project_name")
-    st.markdown(f"**Project:**\n*{project_name}*")
-    st.divider()
 
-    st.header("Views")
-    main_selection = st.radio(
-        "Select a View:",
-        ["📊 Dashboard", "🗂️ DHF Explorer", "🔬 Advanced Analytics"],
-        key="main_view_selection",
-        label_visibility="collapsed"
-    )
-    st.divider()
+# --- UI LAYOUT ---
+st.title("🚀 DHF Command Center")
+project_name = ssm.get_data("design_plan", "project_name")
+st.caption(f"Live monitoring for the **{project_name}** project.")
 
-    if main_selection == "🗂️ DHF Explorer":
-        st.header("DHF Sections")
-        PAGES = {
-            "1. Design Plan": design_plan.render_design_plan,
-            "2. Risk Management": design_risk_management.render_design_risk_management,
-            "3. Human Factors": human_factors.render_human_factors,
-            "4. Design Inputs": design_inputs.render_design_inputs,
-            "5. Design Outputs": design_outputs.render_design_outputs,
-            "6. Design Reviews": design_reviews.render_design_reviews,
-            "7. Design Verification": design_verification.render_design_verification,
-            "8. Design Validation": design_validation.render_design_validation,
-            "9. Design Transfer": design_transfer.render_design_transfer,
-            "10. Design Changes": design_changes.render_design_changes,
-        }
-        dhf_selection = st.radio(
-            "Go to Section:",
-            PAGES.keys(),
-            key="sidebar_dhf_selection",
-            label_visibility="collapsed"
-        )
+# UX SME Rationale: A tabbed interface provides a clean, high-level separation of concerns.
+tab1, tab2, tab3, tab4 = st.tabs([
+    "📊 **Dashboard**",
+    "🗂️ **DHF Explorer**",
+    "🔬 **Advanced Analytics**",
+    "🏛️ **Design Controls Guide**"
+])
 
-# --- MAIN PANEL RENDERING ---
 
-if main_selection == "📊 Dashboard":
+# ==============================================================================
+# TAB 1: PROJECT DASHBOARD
+# ==============================================================================
+with tab1:
     st.header("Project Health & KPIs")
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -148,12 +118,46 @@ if main_selection == "📊 Dashboard":
     """
     st.markdown(legend_html, unsafe_allow_html=True)
 
-elif main_selection == "🗂️ DHF Explorer":
+
+# ==============================================================================
+# TAB 2: DHF EXPLORER
+# ==============================================================================
+with tab2:
+    st.header("Design History File Explorer")
+    st.markdown("Select a DHF section from the sidebar to view or edit its contents.")
+
+    # --- Sidebar for DHF Section Navigation ---
+    with st.sidebar:
+        st.header("DHF Section Navigation")
+        PAGES = {
+            "1. Design Plan": design_plan.render_design_plan,
+            "2. Risk Management": design_risk_management.render_design_risk_management,
+            "3. Human Factors": human_factors.render_human_factors,
+            "4. Design Inputs": design_inputs.render_design_inputs,
+            "5. Design Outputs": design_outputs.render_design_outputs,
+            "6. Design Reviews": design_reviews.render_design_reviews,
+            "7. Design Verification": design_verification.render_design_verification,
+            "8. Design Validation": design_validation.render_design_validation,
+            "9. Design Transfer": design_transfer.render_design_transfer,
+            "10. Design Changes": design_changes.render_design_changes,
+        }
+        dhf_selection = st.radio(
+            "Select a section to edit:",
+            PAGES.keys(),
+            key="sidebar_dhf_selection",
+        )
+
+    # --- Render the selected DHF section editor ---
+    st.divider()
     page_function = PAGES[dhf_selection]
     page_function(ssm)
 
-elif main_selection == "🔬 Advanced Analytics":
-    st.title("🔬 Advanced Analytics")
+
+# ==============================================================================
+# TAB 3: ADVANCED ANALYTICS
+# ==============================================================================
+with tab3:
+    st.header("Advanced Compliance & Project Analytics")
     analytics_tabs = st.tabs(["Traceability Matrix", "Action Item Tracker", "Project Task Editor"])
 
     with analytics_tabs[0]:
@@ -161,22 +165,78 @@ elif main_selection == "🔬 Advanced Analytics":
     with analytics_tabs[1]:
         render_action_item_tracker(ssm)
     with analytics_tabs[2]:
-        st.header("Project Timeline and Task Editor")
-        st.warning("Directly edit project timelines, statuses, and dependencies. Changes are saved automatically and will reflect on the main dashboard.", icon="⚠️")
+        st.subheader("Project Timeline and Task Editor")
+        st.warning("Directly edit project timelines, statuses, and dependencies. Changes are saved automatically.", icon="⚠️")
         columns_to_hide = ['color', 'is_critical', 'line_color', 'line_width', 'display_text']
         editable_cols = [col for col in tasks_df.columns if col not in columns_to_hide]
         edited_df = st.data_editor(
-            tasks_df[editable_cols],
-            key="main_task_editor",
-            num_rows="dynamic",
-            use_container_width=True,
-            column_config={
-                "start_date": st.column_config.DateColumn("Start Date", format="YYYY-MM-DD"),
-                "end_date": st.column_config.DateColumn("End Date", format="YYYY-MM-DD")
-            }
+            tasks_df[editable_cols], key="main_task_editor", num_rows="dynamic", use_container_width=True,
+            column_config={"start_date": st.column_config.DateColumn("Start Date", format="YYYY-MM-DD"), "end_date": st.column_config.DateColumn("End Date", format="YYYY-MM-DD")}
         )
         original_subset = tasks_df[editable_cols].reset_index(drop=True)
         if not edited_df.reset_index(drop=True).equals(original_subset):
             ssm.update_data(edited_df.to_dict('records'), "project_management", "tasks")
             st.toast("Project tasks updated! Rerunning...")
             st.rerun()
+
+# ==============================================================================
+# TAB 4: DESIGN CONTROLS GUIDE (NEW CONTENT)
+# ==============================================================================
+with tab4:
+    st.header("A Guide to Design Controls & the V-Model")
+    st.markdown("This section provides a high-level overview of the Design Controls methodology, a cornerstone of medical device development required by the FDA.")
+
+    st.subheader("The Design Controls Process (21 CFR 820.30)")
+    st.markdown("""
+    Design Controls are a systematic process to ensure that a medical device is safe and effective for its intended use. It's not just about paperwork; it's a framework for quality-driven product development. The entire process is designed to create a **Design History File (DHF)**, which is the collection of documents that proves you followed the process. This application is a tool to build and manage that DHF.
+    """)
+
+    with st.expander("Expand to see how DHF sections map to FDA regulations"):
+        st.markdown("""
+        | DHF Section in this App      | Regulation (21 CFR 820.30) | Purpose                                                                 |
+        |------------------------------|----------------------------|-------------------------------------------------------------------------|
+        | **1. Design Plan**           | `(b) Design/Dev. Planning` | Outlines project scope, activities, team, and responsibilities.         |
+        | **2. Risk Management**       | `(g) Design Validation`    | Identifies, evaluates, and controls risks (as per ISO 14971).           |
+        | **3. Human Factors**         | `(c) Design Input`         | Ensures user needs and safe use are considered in the design.           |
+        | **4. Design Inputs**         | `(c) Design Input`         | Defines all requirements (user, technical, regulatory).                 |
+        | **5. Design Outputs**        | `(d) Design Output`        | The tangible results of design (drawings, specs) that meet inputs.      |
+        | **6. Design Reviews**        | `(e) Design Review`        | Formal checkpoints to review the design's progress and adequacy.        |
+        | **7. Design Verification**   | `(f) Design Verification`  | Confirms that design outputs meet the design inputs. *Built it right?*  |
+        | **8. Design Validation**     | `(g) Design Validation`    | Confirms the device meets user needs. *Built the right thing?*          |
+        | **9. Design Transfer**       | `(h) Design Transfer`      | Transfers the design to manufacturing for production.                   |
+        | **10. Design Changes**       | `(i) Design Changes`       | Formally controls any changes made after the design is approved.        |
+        """)
+
+    st.subheader("Visualizing the Process: The V-Model")
+    st.markdown("The V-Model is a powerful way to visualize the Design Controls process, emphasizing the critical link between design (left side) and testing (right side).")
+
+    v_model_image_path = os.path.join(current_dir, "v_model_diagram.png")
+    if os.path.exists(v_model_image_path):
+        st.image(v_model_image_path, caption="The V-Model illustrates the relationship between design decomposition and integration/testing.", use_container_width=True)
+    else:
+        st.error(f"Image Not Found: Ensure `v_model_diagram.png` is in the `{current_dir}` directory.", icon="🚨")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        st.subheader("Left Side: Decomposition & Design")
+        st.markdown("""
+        Moving down the left side of the 'V' involves breaking down the high-level concept into detailed, buildable specifications.
+        - **User Needs & Intended Use:** What problem does the user need to solve?
+        - **Design Inputs (Requirements):** How must the device perform to meet those needs? This includes technical, functional, and safety requirements.
+        - **System & Architectural Design:** How will the components be structured to meet the requirements?
+        - **Detailed Design (Outputs):** At the lowest level, these are the final drawings, code, and specifications that are used to build the device.
+        """)
+    with col2:
+        st.subheader("Right Side: Integration & Testing")
+        st.markdown("""
+        Moving up the right side of the 'V' involves building the device from its components and testing at each level to ensure it matches the corresponding design phase on the left.
+        - **Unit/Component Verification:** Does each individual part meet its detailed design specification?
+        - **Integration & System Verification:** Do the assembled parts work together as defined in the architectural design?
+        - **Design Validation:** Does the final, complete device meet the high-level User Needs? This is the ultimate test.
+        """)
+
+    st.success("""
+    #### The Core Principle: Verification vs. Validation
+    - **Verification (Horizontal Arrows):** Answers the question, **"Are we building the product right?"** It is the process of confirming that a design output meets its specified input requirements (e.g., does the code correctly implement the detailed design?).
+    - **Validation (Top-Level Arrow):** Answers the question, **"Are we building the right product?"** It is the process of confirming that the final, finished product meets the user's actual needs and its intended use.
+    """)
