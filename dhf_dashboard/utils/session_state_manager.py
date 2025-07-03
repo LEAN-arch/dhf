@@ -6,12 +6,24 @@ from datetime import date, timedelta
 class SessionStateManager:
     """Manages session state with added structures for advanced analytics and compliance."""
     def __init__(self):
-        if 'dhf_data' not in st.session_state:
+        # --- ROBUSTNESS FIX: Use a data version number ---
+        # This ensures that if we update the mock data structure, the app will
+        # automatically reload it, ignoring any stale data in the session state.
+        # Increment this number whenever you make significant changes to the mock data below.
+        CURRENT_DATA_VERSION = 2 # Was 1 before, now it's 2
+
+        # Check if the data is missing or if the version is outdated
+        if ('dhf_data' not in st.session_state or 
+            st.session_state.dhf_data.get('data_version') != CURRENT_DATA_VERSION):
+            
+            st.toast("Initializing fresh mock data (v2)...") # Helpful feedback for the developer
+            
             # --- MOCK DATA INJECTION ---
-            # Define a base date in 2026 for all time-based data
-            base_date = date(2026, 1, 15)
+            # Define a base date in 2025 for all time-based data
+            base_date = date(2025, 1, 15)
 
             st.session_state.dhf_data = {
+                "data_version": CURRENT_DATA_VERSION, # Add the version number to the data
                 "design_plan": {
                     "project_name": "Smart-Pill Drug Delivery System",
                     "scope": "This project covers the design and development of a new combination product, the 'Smart-Pill', which integrates an electronic sensor with a drug delivery mechanism. The scope includes the pill itself, the associated firmware, and the user interface for patient monitoring.",
@@ -47,7 +59,7 @@ class SessionStateManager:
                         {"id": "DO-001", "title": "Pill Casing Mechanical Drawing", "type": "CAD File", "linked_input_id": "SR-01"},
                         {"id": "DO-002", "title": "Firmware Module - Dose Calculation", "type": "Source Code", "linked_input_id": "UN-02"},
                         {"id": "DO-003", "title": "BLE Communication Protocol Specification", "type": "Specification", "linked_input_id": "SR-02"},
-                    ] # Note: REG-01 is intentionally not linked to test the traceability matrix
+                    ]
                 },
                 "design_reviews": {
                     "reviews": [
@@ -56,12 +68,6 @@ class SessionStateManager:
                             "action_items": [
                                 {"id": "AI-DR1-01", "description": "Finalize battery selection", "owner": "A. Weber", "due_date": base_date + timedelta(days=75), "status": "Completed"},
                                 {"id": "AI-DR1-02", "description": "Draft initial software architecture", "owner": "B. Chen", "due_date": base_date + timedelta(days=90), "status": "In Progress"},
-                            ]
-                        },
-                        {
-                            "id": "DR-02", "date": base_date + timedelta(days=120), "attendees": "A. Weber, B. Chen, C. Davis, D. Evans", "notes": "Design review for first prototype. Casing dimensions are acceptable. Firmware needs further testing.",
-                            "action_items": [
-                                {"id": "AI-DR2-01", "description": "Investigate alternative casing material", "owner": "D. Evans", "due_date": base_date - timedelta(days=10), "status": "In Progress"}, # This will be overdue
                             ]
                         }
                     ]
@@ -72,27 +78,10 @@ class SessionStateManager:
                         {"id": "VER-002", "description": "Unit test for dose calculation algorithm (1000 iterations)", "output_verified": "DO-002", "result": "Passed"},
                     ]
                 },
-                "design_validation": {
-                    "studies": [
-                        {"id": "VAL-001", "description": "Usability study with 20 representative users", "user_need_validated": "UN-01", "result": "Passed"},
-                    ]
-                },
-                "human_factors": {
-                    "use_scenarios": [
-                        {"id": "HF-US-01", "scenario_description": "Patient takes the pill with a glass of water.", "associated_risks": "HAZ-001"},
-                        {"id": "HF-US-02", "scenario_description": "Patient's phone (receiver) is out of BLE range.", "associated_risks": "HAZ-003"},
-                    ]
-                },
-                "design_transfer": {
-                    "activities": [
-                         {"id": "DT-01", "activity_description": "Manufacturing process instructions (MPI) drafted.", "status": "Not Started", "completion_date": None},
-                    ]
-                },
-                "design_changes": {
-                    "changes": [
-                        {"id": "DCR-001", "description": "Change BLE chipset from model A to model B due to supply chain issues.", "date_initiated": base_date + timedelta(days=100), "status": "Under Review", "impact_analysis": "Pending"},
-                    ]
-                },
+                "design_validation": { "studies": [] },
+                "human_factors": { "use_scenarios": [] },
+                "design_transfer": { "activities": [] },
+                "design_changes": { "changes": [] },
                 "project_management": {
                     "tasks": [
                         {"id": "PLAN", "name": "1. Design Planning", "start_date": base_date, "end_date": base_date + timedelta(days=14), "status": "Completed", "completion_pct": 100, "dependencies": ""},
