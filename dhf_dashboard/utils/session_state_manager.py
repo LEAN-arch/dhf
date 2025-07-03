@@ -6,24 +6,20 @@ from datetime import date, timedelta
 class SessionStateManager:
     """Manages session state with added structures for advanced analytics and compliance."""
     def __init__(self):
-        # --- ROBUSTNESS FIX: Use a data version number ---
-        # This ensures that if we update the mock data structure, the app will
-        # automatically reload it, ignoring any stale data in the session state.
-        # Increment this number whenever you make significant changes to the mock data below.
-        CURRENT_DATA_VERSION = 2 # Was 1 before, now it's 2
+        # SME Note: Versioning the data ensures that when we update the mock data structure,
+        # the app automatically reloads it, preventing bugs from stale session state.
+        CURRENT_DATA_VERSION = 3 # Incremented to force a refresh of stale data
 
-        # Check if the data is missing or if the version is outdated
         if ('dhf_data' not in st.session_state or 
             st.session_state.dhf_data.get('data_version') != CURRENT_DATA_VERSION):
             
-            st.toast("Initializing fresh mock data (v2)...") # Helpful feedback for the developer
+            st.toast(f"Initializing fresh mock data (v{CURRENT_DATA_VERSION})...")
             
-            # --- MOCK DATA INJECTION ---
-            # Define a base date in 2025 for all time-based data
+            # Base date set to 2025 as requested
             base_date = date(2025, 1, 15)
 
             st.session_state.dhf_data = {
-                "data_version": CURRENT_DATA_VERSION, # Add the version number to the data
+                "data_version": CURRENT_DATA_VERSION,
                 "design_plan": {
                     "project_name": "Smart-Pill Drug Delivery System",
                     "scope": "This project covers the design and development of a new combination product, the 'Smart-Pill', which integrates an electronic sensor with a drug delivery mechanism. The scope includes the pill itself, the associated firmware, and the user interface for patient monitoring.",
@@ -39,9 +35,10 @@ class SessionStateManager:
                 },
                 "risk_management_file": {
                     "hazards": [
-                        {"id": "HAZ-001", "description": "Incorrect drug dosage delivered", "cause": "Firmware calculation error", "initial_severity": 5, "initial_probability": 3, "initial_risk": "High", "mitigation": "Implement redundant calculation checks; rigorous unit testing (VER-002).", "final_severity": 5, "final_probability": 1, "final_risk": "Low"},
-                        {"id": "HAZ-002", "description": "Battery failure during use", "cause": "Component end-of-life", "initial_severity": 4, "initial_probability": 2, "initial_risk": "Medium", "mitigation": "Use medical-grade battery with known lifecycle; software low-battery warning.", "final_severity": 4, "final_probability": 1, "final_risk": "Low"},
-                        {"id": "HAZ-003", "description": "Patient data transmission intercepted (Cybersecurity)", "cause": "Unencrypted data channel", "initial_severity": 3, "initial_probability": 4, "initial_risk": "High", "mitigation": "Implement AES-256 encryption for all data transmissions.", "final_severity": 3, "final_probability": 1, "final_risk": "Low"},
+                        {"id": "HAZ-001", "description": "Incorrect drug dosage delivered", "cause": "Firmware calculation error", "initial_severity": 5, "initial_probability": 3, "initial_risk": "High", "mitigation": "Implement redundant calculation checks; rigorous unit testing (VER-002).", "final_severity": 5, "final_probability": 1, "final_risk": "Low", "residual_risk_accepted": True},
+                        {"id": "HAZ-002", "description": "Battery failure during use", "cause": "Component end-of-life", "initial_severity": 4, "initial_probability": 2, "initial_risk": "Medium", "mitigation": "Use medical-grade battery with known lifecycle; software low-battery warning.", "final_severity": 4, "final_probability": 1, "final_risk": "Low", "residual_risk_accepted": True},
+                        {"id": "HAZ-003", "description": "Patient data transmission intercepted (Cybersecurity)", "cause": "Unencrypted data channel", "initial_severity": 3, "initial_probability": 4, "initial_risk": "High", "mitigation": "Implement AES-256 encryption for all data transmissions.", "final_severity": 3, "final_probability": 1, "final_risk": "Low", "residual_risk_accepted": True},
+                        {"id": "HAZ-004", "description": "Pill casing cracks during swallowing", "cause": "Material stress failure", "initial_severity": 4, "initial_probability": 3, "initial_risk": "High", "mitigation": "Change material to medical-grade polymer X.", "final_severity": 2, "final_probability": 1, "final_risk": "Low", "residual_risk_accepted": False},
                     ],
                     "overall_risk_benefit_analysis": "Initial analysis shows a positive risk-benefit profile. The identified high-risk hazards have feasible mitigations that significantly reduce the overall risk. This analysis will be finalized upon completion of all verification and validation activities."
                 },
@@ -63,11 +60,16 @@ class SessionStateManager:
                 },
                 "design_reviews": {
                     "reviews": [
-                        {
-                            "id": "DR-01", "date": base_date + timedelta(days=60), "attendees": "A. Weber, B. Chen, C. Davis", "notes": "Concept review completed. Feasibility approved. Key risks identified.",
+                        { "id": "DR-01", "date": base_date + timedelta(days=60), "attendees": "A. Weber, B. Chen, C. Davis", "notes": "Concept review completed. Feasibility approved. Key risks identified.",
                             "action_items": [
                                 {"id": "AI-DR1-01", "description": "Finalize battery selection", "owner": "A. Weber", "due_date": base_date + timedelta(days=75), "status": "Completed"},
                                 {"id": "AI-DR1-02", "description": "Draft initial software architecture", "owner": "B. Chen", "due_date": base_date + timedelta(days=90), "status": "In Progress"},
+                                {"id": "AI-DR1-03", "description": "Source alternative polymer for casing", "owner": "A. Weber", "due_date": base_date + timedelta(days=90), "status": "In Progress"},
+                            ]
+                        },
+                        { "id": "DR-02", "date": base_date + timedelta(days=120), "attendees": "A. Weber, B. Chen, C. Davis, D. Evans", "notes": "Design review for first prototype. Casing dimensions are acceptable. Firmware needs further testing.",
+                            "action_items": [
+                                {"id": "AI-DR2-01", "description": "Investigate alternative casing material", "owner": "D. Evans", "due_date": date(2025, 3, 1), "status": "Overdue"},
                             ]
                         }
                     ]
@@ -78,7 +80,11 @@ class SessionStateManager:
                         {"id": "VER-002", "description": "Unit test for dose calculation algorithm (1000 iterations)", "output_verified": "DO-002", "result": "Passed"},
                     ]
                 },
-                "design_validation": { "studies": [] },
+                "design_validation": {
+                    "studies": [
+                        {"id": "VAL-001", "description": "Usability study with 20 representative users", "user_need_validated": "UN-01", "result": "Passed"},
+                    ]
+                },
                 "human_factors": { "use_scenarios": [] },
                 "design_transfer": { "activities": [] },
                 "design_changes": { "changes": [] },
