@@ -1,7 +1,7 @@
 # File: dhf_dashboard/app.py
-# SME Note: This is the definitive, corrected version. It fixes the AttributeError
-# in the Risk Journey Matrix by correctly handling the immutable 'annotations'
-# tuple in Plotly's layout.
+# SME Note: This is the definitive, fully enhanced version. It replaces the previous
+# risk matrix with a professional-grade, intuitive "Risk Storyboard Matrix" that
+# provides the full context for each risk journey directly on the chart.
 
 import sys
 import os
@@ -65,9 +65,9 @@ def render_design_control_tracker(ssm):
                     st.caption("Sign-off data is not in the correct format.")
     st.info("This tracker provides a live view of DHF completeness for gate review readiness. The overall project timeline is shown in the Gantt Chart at the bottom of this dashboard.", icon="💡")
 
-def render_risk_journey_arrow_matrix(ssm):
+def render_risk_storyboard_matrix(ssm):
     st.subheader("2. Risk Management Dashboard (ISO 14971, ICH Q9)")
-    st.markdown("Analyze the project's risk profile via an interactive Risk Journey Matrix, historical trends, and top risks.")
+    st.markdown("Analyze the project's risk profile via an interactive Risk Storyboard Matrix, historical trends, and top risks.")
     hazards_data = ssm.get_data("risk_management_file", "hazards")
     historical_rpn = pd.DataFrame(ssm.get_data("risk_management_file", "historical_rpn"))
 
@@ -93,9 +93,11 @@ def render_risk_journey_arrow_matrix(ssm):
             st.plotly_chart(fig_line, use_container_width=True)
     st.divider()
 
-    st.markdown("**Interactive Risk Journey Arrow Matrix**")
-    st.caption("This matrix shows the journey of each risk from its initial (tail) to residual (head) position. Hover over an arrow's head for full details.")
+    # --- Optimal "Risk Storyboard Matrix" ---
+    st.markdown("**Interactive Risk Storyboard Matrix**")
+    st.caption("Each card shows a risk's journey from its initial to its final position. The background color indicates the final risk level.")
 
+    # 1. Define the risk matrix configuration
     risk_config = {
         'levels': { (1,1):'Low', (1,2):'Low', (1,3):'Medium', (1,4):'Medium', (1,5):'High',
                     (2,1):'Low', (2,2):'Low', (2,3):'Medium', (2,4):'High', (2,5):'High',
@@ -106,67 +108,62 @@ def render_risk_journey_arrow_matrix(ssm):
         'values': { 'Unacceptable': 3, 'High': 2, 'Medium': 1, 'Low': 0 }
     }
     
-    def get_level_val(s, o): return risk_config['values'][risk_config['levels'].get((s, o), 'Low')]
-    df['initial_level_val'] = df.apply(lambda x: get_level_val(x['initial_S'], x['initial_O']), axis=1)
-    df['final_level_val'] = df.apply(lambda x: get_level_val(x['final_S'], x['final_O']), axis=1)
+    # 2. Engineer features for the visualization
+    def get_level(s, o): return risk_config['levels'].get((s, o), 'Low')
+    df['initial_level_str'] = df.apply(lambda x: get_level(x['initial_S'], x['initial_O']), axis=1)
     
-    def get_arrow_color(row):
-        if row['final_level_val'] < row['initial_level_val']: return 'green'
-        if row['final_level_val'] == row['initial_level_val'] and row['final_level_val'] > 1: return 'red'
-        if row['final_level_val'] > 1: return 'orange'
-        return 'green'
-    df['arrow_color'] = df.apply(get_arrow_color, axis=1)
-
+    # Create the "story card" for each risk
+    df['story_card'] = df.apply(
+        lambda x: (
+            f"<b>{x['hazard_id']}:</b> {x['description'][:30]}...<br>"
+            f"  Initial: {x['initial_level_str']} (S:{x['initial_S']}, O:{x['initial_O']}) ➞ Final: {get_level(x['final_S'], x['final_O'])} (S:{x['final_S']}, O:{x['final_O']})<br>"
+            f"  RPN: {x['initial_rpn']} ➞ {x['final_rpn']}"
+        ), axis=1)
+    
+    # 3. Aggregate data for plotting
+    cell_text = df.groupby(['final_S', 'final_O'])['story_card'].apply(lambda x: '<br><hr>'.join(x)).reset_index()
+    cell_counts = df.groupby(['final_S', 'final_O']).size().reset_index(name='count')
+    
+    # 4. Create the background heatmap
     s_range, o_range = range(1, 6), range(1, 6)
-    z_matrix = [[risk_config['values'][risk_config['levels'].get((s, o))] for o in o_range] for s in s_range]
-    colorscale = [[0, '#b0d6b1'], [0.33, '#fdd8a7'], [0.66, '#f4a5a5'], [1.0, '#c78d8d']]
+    z_matrix = [[risk_config['values'][get_level(s, o)] for o in o_range] for s in s_range]
+    colorscale = [[0, '#e5f5e0'], [0.33, '#fff2e0'], [0.66, '#ffe5e5'], [1.0, '#f2d0d0']]
     
     fig = go.Figure(data=go.Heatmap(
                    z=z_matrix, x=list(o_range), y=list(s_range),
                    colorscale=colorscale, showscale=False, hoverinfo='none'))
+    
+    # 5. Add annotations for each cell
+    annotations = []
+    for _, row in cell_text.iterrows():
+        s, o, text = row['final_S'], row['final_O'], row['story_card']
+        level_name = get_level(s, o)
+        font_color = 'white' if level_name in ['High', 'Unacceptable'] else 'black'
+        annotations.append(dict(x=o, y=s, text=text, showarrow=False, align='left',
+                                font=dict(color='#333333', size=9),
+                                bordercolor='#cccccc', borderwidth=1, bgcolor='rgba(255, 255, 255, 0.7)'))
 
-    # --- FIX IS HERE: Create a mutable list for annotations ---
-    annotations_list = []
-    scatter_x, scatter_y, custom_data = [], [], []
-    for _, row in df.iterrows():
-        annotations_list.append(go.layout.Annotation(
-            x=row['final_O'], y=row['final_S'], ax=row['initial_O'], ay=row['initial_S'],
-            xref='x', yref='y', axref='x', ayref='y',
-            showarrow=True, arrowhead=2, arrowwidth=2, arrowcolor=row['arrow_color'],
-        ))
-        
-        scatter_x.append(row['final_O'])
-        scatter_y.append(row['final_S'])
-        hover_text = (
-            f"<b>{row['hazard_id']}: {row['description']}</b><br><br>"
-            f"<b>Initial State:</b> S={row['initial_S']}, O={row['initial_O']}, D={row['initial_D']} | RPN = {row['initial_rpn']}<br>"
-            f"<b>Residual State:</b> S={row['final_S']}, O={row['final_O']}, D={row['final_D']} | RPN = {row['final_rpn']}<br>"
-            f"<b>RPN Reduction:</b> {row['initial_rpn'] - row['final_rpn']}"
-        )
-        custom_data.append(hover_text)
+    # Add a simplified hover layer
+    hover_z = np.full((5,5), fill_value=np.nan)
+    hover_text = [[f"<b>Risk Level: {get_level(s,o)}</b><br>Residual Risks in Cell: 0" for o in o_range] for s in s_range]
+    for _, row in cell_counts.iterrows():
+        hover_text[row['final_S']-1][row['final_O']-1] = f"<b>Risk Level: {get_level(row['final_S'], row['final_O'])}</b><br>Residual Risks in Cell: {row['count']}"
+    
+    fig.add_trace(go.Heatmap(z=hover_z, x=list(o_range), y=list(s_range),
+                             text=hover_text, texttemplate="%{text}", hoverinfo='none', showscale=False,
+                             colorscale=[[0,'rgba(0,0,0,0)'],[1,'rgba(0,0,0,0)']],
+                             ))
 
-    fig.add_trace(go.Scatter(
-        x=scatter_x, y=scatter_y, customdata=custom_data, mode='markers',
-        marker=dict(color='rgba(0,0,0,0)', size=20),
-        hovertemplate='%{customdata}<extra></extra>'
-    ))
-
-    # Assign the completed list to the layout once
     fig.update_layout(
-        title="Risk Journey Arrow Matrix",
+        title="Risk Storyboard Matrix",
         xaxis_title="Occurrence (O)", yaxis_title="Severity (S)",
-        yaxis=dict(autorange='reversed'), annotations=tuple(annotations_list), # Convert back to tuple
-        width=700, height=700, xaxis_side='top',
-        plot_bgcolor='rgba(0,0,0,0)', margin=dict(l=50, r=50, t=100, b=50)
+        yaxis=dict(autorange='reversed', tickvals=list(s_range)),
+        xaxis=dict(tickvals=list(o_range)),
+        width=800, height=800, xaxis_side='top',
+        plot_bgcolor='white', annotations=annotations,
+        margin=dict(l=50, r=50, t=100, b=50)
     )
     st.plotly_chart(fig, use_container_width=True)
-    st.markdown("""
-    **Legend:**
-    - <span style='color:green;'>●</span> **Green Arrow:** Risk was effectively reduced to a lower category.
-    - <span style='color:orange;'>●</span> **Orange Arrow:** Risk was reduced but remains in a Medium or High category.
-    - <span style='color:red;'>●</span> **Red Arrow:** Risk level was not reduced and remains High or Unacceptable.
-    """, unsafe_allow_html=True)
-
 
 def render_vv_readiness_panel(ssm):
     st.subheader("3. Verification & Validation Readiness Panel")
@@ -290,7 +287,7 @@ with tab1:
 
     render_design_control_tracker(ssm)
     st.divider()
-    render_risk_journey_arrow_matrix(ssm) # Calling the new enhanced function
+    render_risk_storyboard_matrix(ssm)
     st.divider()
     render_vv_readiness_panel(ssm)
     st.divider()
