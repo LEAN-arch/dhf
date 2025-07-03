@@ -1,28 +1,28 @@
-# File: dhf_dashboard/utils/session_state_manager.py
-# SME Note: This is the definitive, fully populated data model. It makes a final
-# adjustment to all dates to be July 2025 and beyond, ensuring a consistent
-# and forward-looking demonstration.
+# File: dhf_dashboard/utils/session_state_manager.py# File: dhf_dashboard/utils/session_state_manager.py
+# SME Note: This is the definitive, fully populated, and untruncated data model.
+# It contains complete data for every section to ensure a full "out-of-the-box" experience
+# with all features and visualizations fully active.
 
 import streamlit as st
 from datetime import date, timedelta
+import numpy as np
 
 class SessionStateManager:
     """
     Manages session state with a robust, interconnected mock dataset designed for a
-    professional-grade Design Assurance dashboard.
+    professional-grade Design Assurance dashboard with advanced statistical tools.
     """
     def __init__(self):
-        # Incrementing version to 16 to load the final date-adjusted data.
-        CURRENT_DATA_VERSION = 16
+        # Incrementing version to 18 to load the final, most comprehensive data model.
+        CURRENT_DATA_VERSION = 18
 
         if ('dhf_data' not in st.session_state or
             st.session_state.dhf_data.get('data_version') != CURRENT_DATA_VERSION):
 
-            st.toast(f"Loading Definitive Project Timeline (v{CURRENT_DATA_VERSION})...")
+            st.toast(f"Loading Definitive & Complete Data Model (v{CURRENT_DATA_VERSION})...")
 
-            # --- NEW DATE ANCHORS ---
             base_date = date(2025, 7, 1) # Project Start Date
-            demo_current_date = base_date + timedelta(days=45) # Simulates "Today" as August 15, 2025
+            demo_current_date = base_date + timedelta(days=90) # Simulates "Today" as late September 2025
 
             st.session_state.dhf_data = {
                 "data_version": CURRENT_DATA_VERSION,
@@ -45,22 +45,20 @@ class SessionStateManager:
                         {"hazard_id": "H-004", "description": "Loss of data integrity (cybersecurity breach)", "initial_S": 3, "initial_O": 3, "initial_D": 2, "final_S": 3, "final_O": 1, "final_D": 1},
                         {"hazard_id": "H-005", "description": "Pill casing cracks (choking hazard)", "initial_S": 5, "initial_O": 1, "initial_D": 2, "final_S": 5, "final_O": 1, "final_D": 1},
                     ],
-                    "historical_rpn": [
-                        {"date": base_date + timedelta(days=10), "total_rpn": 350},
-                        {"date": base_date + timedelta(days=25), "total_rpn": 210},
-                        {"date": base_date + timedelta(days=40), "total_rpn": 95}
-                    ],
+                    "historical_rpn": [{"date": "2025-07-10", "total_rpn": 350}, {"date": "2025-07-25", "total_rpn": 210}, {"date": "2025-08-15", "total_rpn": 95}],
                     "fta_document_ref": "FTA-001 - System Safety Analysis",
                     "dfmea": [
                         {"id": "DFMEA-01", "failure_mode": "Pill casing seal failure", "potential_effect": "Drug leakage, incorrect dose", "S": 5, "O": 2, "D": 2, "mitigation": "Redesigned seal geometry, add seal integrity test."},
                         {"id": "DFMEA-02", "failure_mode": "Battery shorts circuit", "potential_effect": "Device failure, potential thermal event", "S": 5, "O": 1, "D": 3, "mitigation": "Use medically certified battery with short-circuit protection."},
                         {"id": "DFMEA-03", "failure_mode": "Software algorithm miscalculates release time", "potential_effect": "Incorrect dose timing", "S": 4, "O": 3, "D": 2, "mitigation": "Add checksums, implement robust unit testing, code reviews."},
+                        {"id": "DFMEA-04", "failure_mode": "Antenna connection fails during use", "potential_effect": "Loss of communication, no dose confirmation", "S": 3, "O": 2, "D": 4, "mitigation": "Improve solder process and add automated inspection."}
                     ],
                     "pfmea": [
                         {"id": "PFMEA-01", "failure_mode": "Incorrect polymer mixing ratio", "potential_effect": "Casing brittle, fails biocompatibility", "S": 5, "O": 2, "D": 4, "mitigation": "Automated mixing system with ratio alarms."},
                         {"id": "PFMEA-02", "failure_mode": "Contamination during drug filling", "potential_effect": "Adverse patient reaction", "S": 5, "O": 2, "D": 3, "mitigation": "Perform filling in certified cleanroom, regular environmental monitoring."},
                         {"id": "PFMEA-03", "failure_mode": "Incorrect torque on sealing machine", "potential_effect": "Improper seal, drug leakage", "S": 4, "O": 3, "D": 3, "mitigation": "Use calibrated torque wrench, regular calibration schedule."},
-                    ]
+                        {"id": "PFMEA-04", "failure_mode": "Operator mis-calibrates sensor during setup", "potential_effect": "Incorrect dose dispensing", "S": 4, "O": 2, "D": 5, "mitigation": "Implement poka-yoke (mistake-proofing) jig for calibration."}
+                    ],
                 },
                 "human_factors": {"use_scenarios": [{"use_scenario": "Patient takes daily pill", "user_task": "Swallows pill with water", "potential_use_error": "Takes pill without water", "potential_harm": "Pill lodges in esophagus", "related_hazard_id": "H-005"}]},
                 "design_inputs": {
@@ -86,13 +84,13 @@ class SessionStateManager:
                 },
                 "design_reviews": {
                     "reviews":[
-                        {"date": base_date + timedelta(days=30), "attendees": "A. Weber, B. Chen, JOSE BAUTISTA, C. Day, D. Evans", "notes": "Phase 1 Gate Review completed. Approved to proceed to detailed design. Key action items on material sourcing and software architecture.", "is_gate_review": True,
+                        {"date": demo_current_date - timedelta(days=30), "attendees": "A. Weber, B. Chen, JOSE BAUTISTA, C. Day, D. Evans", "notes": "Phase 1 Gate Review completed. Approved to proceed to detailed design. Key action items on material sourcing and software architecture.", "is_gate_review": True,
                          "action_items": [
-                            {"id": "AI-DR1-01", "description": "Finalize biocompatible polymer selection from approved supplier list.", "owner": "B. Chen", "due_date": demo_current_date - timedelta(days=5), "status": "Completed"},
+                            {"id": "AI-DR1-01", "description": "Finalize biocompatible polymer selection from approved supplier list.", "owner": "B. Chen", "due_date": demo_current_date - timedelta(days=15), "status": "Completed"},
                             {"id": "AI-DR1-02", "description": "Update Risk Management File with outputs from this review.", "owner": "JOSE BAUTISTA", "due_date": demo_current_date + timedelta(days=5), "status": "In Progress"},
                             {"id": "AI-DR1-03", "description": "Create detailed CAD models for manufacturing molds.", "owner": "B. Chen", "due_date": demo_current_date + timedelta(days=30), "status": "In Progress"},
                             {"id": "AI-DR1-04", "description": "Develop initial firmware for Bluetooth communication handshake.", "owner": "C. Day", "due_date": demo_current_date + timedelta(days=45), "status": "Open"},
-                            {"id": "AI-DR1-05", "description": "Finalize drug stability protocol for combination testing.", "owner": "D. Evans", "due_date": demo_current_date - timedelta(days=10), "status": "Open"}, # This will be overdue
+                            {"id": "AI-DR1-05", "description": "Finalize drug stability protocol for combination testing.", "owner": "D. Evans", "due_date": demo_current_date - timedelta(days=10), "status": "Open"},
                             {"id": "AI-DR1-06", "description": "Draft V&V Master Plan.", "owner": "JOSE BAUTISTA", "due_date": demo_current_date + timedelta(days=15), "status": "In Progress"}
                         ]}
                     ]
@@ -107,7 +105,7 @@ class SessionStateManager:
                 "design_validation": {"studies": [{"id": "VAL-001", "study_name": "Simulated Use Human Factors Study (n=15)", "user_need_validated": "UN-001", "risk_control_effectiveness": True, "result": "In Progress", "report_file": ""}]},
                 "design_transfer": {
                     "activities": [
-                        {"activity": "Installation Qualification (IQ) - Assembly Line A", "responsible_party": "Mfg. Eng.", "status": "Completed", "completion_date": demo_current_date - timedelta(days=30), "evidence_link": "IQ-RPT-01.pdf"},
+                        {"activity": "Installation Qualification (IQ) - Assembly Line A", "responsible_party": "Mfg. Eng.", "status": "Completed", "completion_date": demo_current_date - timedelta(days=45), "evidence_link": "IQ-RPT-01.pdf"},
                         {"activity": "Operational Qualification (OQ) - Assembly Line A", "responsible_party": "Mfg. Eng.", "status": "In Progress", "completion_date": None, "evidence_link": ""},
                         {"activity": "Performance Qualification (PQ) - Assembly Line A", "responsible_party": "JOSE BAUTISTA", "status": "Not Started", "completion_date": None, "evidence_link": ""},
                         {"activity": "Finalize Device Master Record (DMR)", "responsible_party": "JOSE BAUTISTA", "status": "In Progress", "completion_date": None, "evidence_link": ""}
@@ -117,22 +115,24 @@ class SessionStateManager:
                 "quality_system": {
                     "capa_records": [{"id": "CAPA-01", "status": "Closed", "source": "Internal Audit"}, {"id": "CAPA-02", "status": "Open", "source": "Supplier Corrective Action"}],
                     "supplier_audits": [{"supplier": "PillCasing Inc.", "status": "Pass", "date": base_date + timedelta(days=20)}, {"supplier": "BatteryCorp", "status": "Pass with Observations", "date": base_date + timedelta(days=35)}],
-                    "continuous_improvement": [{"date": base_date + timedelta(days=15), "area": "Documentation", "impact": 15}, {"date": base_date + timedelta(days=40), "area": "Testing", "impact": 10}],
+                    "continuous_improvement": [{"date": base_date + timedelta(days=15), "area": "Documentation", "impact": 15, "ftr_rate": 88, "copq_cost": 15000}, {"date": base_date + timedelta(days=40), "area": "Testing", "impact": 10, "ftr_rate": 92, "copq_cost": 11500}],
                     "cgmp_compliance": {
                         "stability_studies": [
                             {"id": "STAB-01", "duration": "3 Months", "condition": "Accelerated", "status": "Completed - Pass"},
                             {"id": "STAB-02", "duration": "6 Months", "condition": "Real-Time", "status": "In Progress"}
                         ],
                         "batch_record_review": {"total": 5, "passed": 4, "failed": 1}
-                    }
+                    },
+                    "spc_data": {"target": 7.95, "usl": 8.00, "lsl": 7.90, "measurements": np.random.normal(7.95, 0.02, 50).tolist()},
+                    "hypothesis_testing_data": {"line_a": np.random.normal(99.8, 0.2, 30).tolist(), "line_b": np.random.normal(99.9, 0.15, 30).tolist()}
                 },
                 "project_management": {
                     "tasks": [
-                        {"id": "NEEDS", "name": "User Needs", "start_date": base_date, "end_date": base_date + timedelta(days=30), "status": "Completed", "completion_pct": 100, "sign_offs": {"R&D": "✅", "Quality": "✅", "Marketing": "✅"}},
-                        {"id": "INPUTS", "name": "Design Inputs", "start_date": base_date + timedelta(days=31), "end_date": base_date + timedelta(days=60), "status": "In Progress", "completion_pct": 75, "sign_offs": {"R&D": "In Progress", "Quality": "✅", "Regulatory": "Pending"}},
-                        {"id": "OUTPUTS", "name": "Design Outputs", "start_date": base_date + timedelta(days=61), "end_date": base_date + timedelta(days=120), "status": "Not Started", "completion_pct": 0, "sign_offs": {"R&D": "Pending", "Quality": "Pending", "Regulatory": "Pending"}},
-                        {"id": "V&V", "name": "Verification & Validation", "start_date": base_date + timedelta(days=121), "end_date": base_date + timedelta(days=200), "status": "Not Started", "completion_pct": 0, "sign_offs": {"R&D": "Pending", "Quality": "Pending", "Regulatory": "Pending"}},
-                        {"id": "TRANSFER", "name": "Design Transfer", "start_date": base_date + timedelta(days=201), "end_date": base_date + timedelta(days=240), "status": "Not Started", "completion_pct": 0, "sign_offs": {"Manufacturing": "Pending", "Quality": "Pending"}},
+                        {"id": "NEEDS", "name": "User Needs", "start_date": base_date, "end_date": base_date + timedelta(days=30), "status": "Completed", "completion_pct": 100, "days_taken": 28, "sign_offs": {"R&D": "✅", "Quality": "✅", "Marketing": "✅"}},
+                        {"id": "INPUTS", "name": "Design Inputs", "start_date": base_date + timedelta(days=31), "end_date": base_date + timedelta(days=60), "status": "Completed", "completion_pct": 100, "days_taken": 25, "sign_offs": {"R&D": "✅", "Quality": "✅", "Regulatory": "✅"}},
+                        {"id": "OUTPUTS", "name": "Design Outputs", "start_date": base_date + timedelta(days=61), "end_date": base_date + timedelta(days=120), "status": "In Progress", "completion_pct": 50, "days_taken": None, "sign_offs": {"R&D": "In Progress", "Quality": "Pending", "Regulatory": "Pending"}},
+                        {"id": "V&V", "name": "Verification & Validation", "start_date": base_date + timedelta(days=121), "end_date": base_date + timedelta(days=200), "status": "Not Started", "completion_pct": 0, "days_taken": None, "sign_offs": {"R&D": "Pending", "Quality": "Pending", "Regulatory": "Pending"}},
+                        {"id": "TRANSFER", "name": "Design Transfer", "start_date": base_date + timedelta(days=201), "end_date": base_date + timedelta(days=240), "status": "Not Started", "completion_pct": 0, "days_taken": None, "sign_offs": {"Manufacturing": "Pending", "Quality": "Pending"}}
                     ]
                 },
                 "quality_by_design": {
