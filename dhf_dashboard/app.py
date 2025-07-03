@@ -35,24 +35,28 @@ try:
         tasks_df['end_date'] = pd.to_datetime(tasks_df['end_date'], errors='coerce')
         tasks_df.dropna(subset=['start_date', 'end_date'], inplace=True)
         
-        # DEFINITIVE FIX: Prepare separate, correct columns for Plotly styling
         critical_path_ids = find_critical_path(tasks_df.copy())
         status_colors = {"Completed": "#2ca02c", "In Progress": "#ff7f0e", "Not Started": "#7f7f7f", "At Risk": "#d62728"}
         tasks_df['color'] = tasks_df['status'].map(status_colors).fillna('#7f7f7f')
-        
         tasks_df['is_critical'] = tasks_df['id'].isin(critical_path_ids)
         tasks_df['line_color'] = tasks_df.apply(lambda row: 'red' if row['is_critical'] else row['color'], axis=1)
         tasks_df['line_width'] = tasks_df.apply(lambda row: 4 if row['is_critical'] else 1, axis=1)
         tasks_df['display_text'] = tasks_df.apply(lambda row: f"<b>{row['name']}</b> ({row.get('completion_pct', 0)}%)", axis=1)
     
-    # --- OTHER DATA ---
+    # --- HAZARDS DATA ---
     hazards_df = pd.DataFrame(ssm.get_data("risk_management_file", "hazards"))
+    
+    # --- ACTION ITEMS DATA (DEFINITIVE FIX) ---
+    # This logic now robustly handles cases with zero or multiple reviews.
     all_actions = []
     reviews_data = ssm.get_data("design_reviews", "reviews")
-    if reviews_data:
+    if reviews_data: # Check if the list of reviews is not empty
         for review in reviews_data:
             all_actions.extend(review.get("action_items", []))
     actions_df = pd.DataFrame(all_actions)
+    # --- END OF FIX ---
+
+    # --- OTHER DATA ---
     inputs_df = pd.DataFrame(ssm.get_data("design_inputs", "requirements"))
     outputs_df = pd.DataFrame(ssm.get_data("design_outputs", "documents"))
 
@@ -89,7 +93,22 @@ with tab1:
     if not tasks_df.empty:
         gantt_fig = create_gantt_chart(tasks_df)
         st.plotly_chart(gantt_fig, use_container_width=True)
-        st.info("The **Critical Path** (tasks with a red border) represents the longest sequence of dependent tasks. Any delay in these tasks will delay the entire project.")
+
+        # --- DEFINITIVE FIX: Add a custom, clear legend for the Gantt Chart ---
+        legend_html = """
+        <style>
+            .legend-item { display: flex; align-items: center; margin-bottom: 5px; }
+            .legend-color { width: 15px; height: 15px; margin-right: 10px; border: 1px solid #ccc; }
+        </style>
+        <b>Legend:</b>
+        <div class="legend-item"><div class="legend-color" style="background-color: #2ca02c;"></div> Completed</div>
+        <div class="legend-item"><div class="legend-color" style="background-color: #ff7f0e;"></div> In Progress</div>
+        <div class="legend-item"><div class="legend-color" style="background-color: #d62728;"></div> At Risk</div>
+        <div class="legend-item"><div class="legend-color" style="background-color: #7f7f7f;"></div> Not Started</div>
+        <div class="legend-item"><div class="legend-color" style="border: 2px solid red;"></div> Task on Critical Path</div>
+        """
+        st.markdown(legend_html, unsafe_allow_html=True)
+        # --- END OF FIX ---
     else:
         st.warning("No project tasks found.")
 
@@ -101,23 +120,26 @@ with tab2:
     elif analytics_selection == "Action Item Tracker":
         render_action_item_tracker(ssm)
 
+# This tab will now render correctly because the script no longer crashes.
 with tab3:
     st.header("The Design Control Process (V-Model)")
+    # Ensure the image file is in the same directory as this app.py file
     v_model_image_path = os.path.join(current_dir, "v_model_diagram.png")
-    st.image(v_model_image_path, caption="The V-Model for system development, showing Validation, Verification, and Testing phases.")
-    st.markdown("""The "V-Model" illustrates the lifecycle of a development project...""")
+    try:
+        st.image(v_model_image_path, caption="The V-Model for system development, showing Validation, Verification, and Testing phases.")
+        st.markdown("""The "V-Model" illustrates the lifecycle of a development project...""")
+    except FileNotFoundError:
+        st.error(f"Error: The V-Model image was not found. Please ensure 'v_model_diagram.png' is saved in the 'dhf_dashboard' directory.", icon="🚨")
+
 
 with tab4:
     st.header(f"DHF Section Details: {selection}")
     PAGES = {"1. Design Plan": design_plan, "2. Risk Management File": design_risk_management, "3. Human Factors": human_factors, "4. Design Inputs": design_inputs, "5. Design Outputs": design_outputs, "6. Design Reviews & Gates": design_reviews, "7. Design Verification": design_verification, "8. Design Validation": design_validation, "9. Design Transfer": design_transfer, "10. Design Changes": design_changes}
     if selection == "11. Project Task Editor":
         st.subheader("Project Timeline and Task Editor")
-        # Define columns to hide from the user
         columns_to_hide = ['color', 'is_critical', 'line_color', 'line_width', 'display_text']
         columns_to_show = [col for col in tasks_df.columns if col not in columns_to_hide]
-        
         edited_df = st.data_editor(tasks_df[columns_to_show], key="main_task_editor", num_rows="dynamic", use_container_width=True, column_config={"start_date": st.column_config.DateColumn("Start Date", format="YYYY-MM-DD"), "end_date": st.column_config.DateColumn("End Date", format="YYYY-MM-DD")})
-        
         if not edited_df.equals(tasks_df[columns_to_show]):
             ssm.update_data(edited_df.to_dict('records'), "project_management", "tasks")
             st.success("Project tasks updated! Rerunning...")
