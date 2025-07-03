@@ -1,22 +1,15 @@
 # File: dhf_dashboard/app.py
 
+# NO MORE sys.path.append HERE.
+# We will handle the path by how we EXECUTE the script.
+
 import streamlit as st
 import pandas as pd
-import sys
 import os
 
-# --- CRITICAL PATH CORRECTION ---
-# This block programmatically adds the parent directory of this file's directory
-# (e.g., '/mount/src/dhf/') to the system path. This allows Python to find the
-# 'dhf_dashboard' package and its modules, resolving ModuleNotFoundError.
-# This MUST come before the project-specific imports.
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
-
-
-# --- EXPLICIT, CORRECTED IMPORTS ---
-# Each module is now imported on its own line. This is the direct fix for the
-# "ImportError: cannot import name..." and is the standard way to import
-# modules from within a package.
+# --- EXPLICIT, ABSOLUTE IMPORTS ---
+# These are correct. They assume the directory containing 'dhf_dashboard'
+# is the top-level of our project path.
 
 # Import utilities
 from dhf_dashboard.utils.session_state_manager import SessionStateManager
@@ -39,8 +32,7 @@ from dhf_dashboard.dhf_sections import design_validation
 from dhf_dashboard.dhf_sections import design_transfer
 from dhf_dashboard.dhf_sections import design_changes
 
-
-# --- Page Configuration (must be the first Streamlit command) ---
+# --- Page Configuration ---
 st.set_page_config(
     layout="wide",
     page_title="DHF Command Center",
@@ -49,7 +41,6 @@ st.set_page_config(
 )
 
 # --- Initialize Session State ---
-# This creates our session state manager, which is the single source of truth for all DHF data.
 ssm = SessionStateManager()
 
 # --- Main App Title ---
@@ -73,26 +64,22 @@ with tab1:
     
     col1, col2, col3, col4 = st.columns(4)
     
-    # KPI 1: Overall Progress
     tasks_df = pd.DataFrame(ssm.get_data("project_management", "tasks"))
     completion_pct = tasks_df['completion_pct'].mean() if not tasks_df.empty else 0
     col1.metric("Overall Progress", f"{completion_pct:.1f}%")
     
-    # KPI 2: Risk Profile
     hazards_df = pd.DataFrame(ssm.get_data("risk_management_file", "hazards"))
     high_risks = 0
     if not hazards_df.empty and 'initial_risk' in hazards_df.columns:
         high_risks = len(hazards_df[hazards_df['initial_risk'] == 'High'])
     col2.metric("High-Risk Hazards Identified", f"{high_risks}")
 
-    # KPI 3: Open Actions
     actions = []
     for review in ssm.get_data("design_reviews", "reviews"):
         actions.extend(review.get("action_items", []))
     open_actions = len([a for a in actions if a.get('status') != 'Completed'])
     col3.metric("Open Action Items", f"{open_actions}")
     
-    # KPI 4: Traceability Coverage
     inputs_df = pd.DataFrame(ssm.get_data("design_inputs", "requirements"))
     outputs_df = pd.DataFrame(ssm.get_data("design_outputs", "documents"))
     traced_inputs = 0
@@ -125,7 +112,7 @@ with tab2:
         render_action_item_tracker(ssm)
 
 # ======================================================================================
-# --- TAB 3: DHF STRUCTURE (V-MODEL) ---
+# --- TAB 3: DHF STRUCTURE (V-Model) ---
 # ======================================================================================
 with tab3:
     st.header("The Design Control Process (V-Model)")
@@ -153,19 +140,9 @@ with tab4:
         ]
         selection = st.radio("Go to Section:", page_options)
 
-        st.info("""
-        **How to Use:**
-        1. Navigate through sections using the radio buttons.
-        2. Enter data in the tables and forms.
-        3. View high-level progress and analytics on the main dashboard tabs.
-        """)
-        st.warning("""
-        **Dependencies:**
-        Ensure you have installed all required packages by running:
-        `pip install -r requirements.txt`
-        """)
+        st.info("...") # Sidebar info box
+        st.warning("...") # Sidebar warning box
 
-    # --- Page Routing Logic ---
     PAGES = {
         "1. Design Plan": design_plan,
         "2. Risk Management File": design_risk_management,
@@ -181,17 +158,16 @@ with tab4:
     
     if selection == "11. Project Task Editor":
         st.subheader("11. Project Timeline and Task Editor")
-        st.warning("Directly edit project timelines, statuses, and dependencies. Changes here will impact the Gantt chart and critical path analysis.")
+        st.warning("Directly edit project timelines, statuses, and dependencies.")
         tasks_list = ssm.get_data("project_management", "tasks")
-        
         edited_tasks = st.data_editor(tasks_list, num_rows="dynamic", use_container_width=True)
-        
         if edited_tasks != tasks_list:
             ssm.update_data(edited_tasks, "project_management", "tasks")
             st.success("Project tasks updated!")
             st.rerun()
     else:
-        # Get the correct module object from the PAGES dictionary
+        page_module = PAGES[selection]
+        page_module.render(ssm)
         page_module = PAGES[selection]
         # Call the 'render' function within that module
         page_module.render(ssm)
