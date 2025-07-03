@@ -30,10 +30,10 @@ class SessionStateManager:
                     "scope": "This project covers the design and development of a new combination product, the 'Smart-Pill', intended for the targeted oral delivery of drug XYZ for treating chronic condition ABC. The system comprises a swallowable electronic capsule (device) containing a payload of drug XYZ (drug), a companion mobile application for monitoring, and a cloud-based data backend.",
                     "team_members": [
                         {"role": "Project Lead", "name": "Dr. Alice Weber", "responsibility": "Overall project oversight and final DHF approval."},
-                        {"role": "Device Engineer", "name": "Bob Chen", "responsibility": "Hardware design, material selection, and mechanical testing."},
+                        {"role": "Senior Device Engineer", "name": "Bob Chen", "responsibility": "Hardware design, material selection, and mechanical testing."},
                         {"role": "Software Engineer", "name": "Charlie Day", "responsibility": "Embedded firmware, mobile app development, and cybersecurity."},
-                        {"role": "Pharma Scientist", "name": "Diana Evans", "responsibility": "Drug formulation, stability studies, and release profile analysis."},
-                        {"role": "Quality Lead", "name": "JOSE BAUTISTA", "responsibility": "DHF owner, V&V strategy, Risk Management, and regulatory compliance."}
+                        {"role": "Pharma Scientist", "name": "Dr. Diana Evans", "responsibility": "Drug formulation, stability studies, and release profile analysis."},
+                        {"role": "Sr. Quality Engineer Lead", "name": "JOSE BAUTISTA", "responsibility": "DHF owner, V&V strategy, Risk Management, and regulatory compliance."}
                     ],
                 },
                 "risk_management_file": {
