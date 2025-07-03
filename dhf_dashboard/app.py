@@ -48,8 +48,7 @@ st.title("🚀 DHF Command Center: Smart-Pill Combination Product")
 project_name = ssm.get_data("design_plan", "project_name")
 st.caption(f"Live monitoring, analytics, and compliance for **{project_name}**")
 
-# --- FIX: Define Sidebar Navigation at the Global Level ---
-# The sidebar should be independent of any specific tab.
+# --- Define Sidebar Navigation at the Global Level ---
 with st.sidebar:
     st.header("DHF Section Navigation")
     page_options = [
@@ -58,7 +57,6 @@ with st.sidebar:
         "9. Design Transfer", "10. Design Changes", "11. Project Task Editor"
     ]
     selection = st.radio("Go to Section:", page_options)
-
     st.info("This sidebar allows you to navigate and edit the detailed content for each DHF section, which is displayed in the 'DHF Section Details' tab.")
     st.warning("Ensure all data is saved before navigating away.")
 
@@ -99,12 +97,19 @@ with tab1:
     inputs_df = pd.DataFrame(ssm.get_data("design_inputs", "requirements"))
     outputs_df = pd.DataFrame(ssm.get_data("design_outputs", "documents"))
     traced_inputs = 0
-    if not inputs_df.empty and not outputs_df.empty and 'linked_input_id' in outputs_df.columns and 'id' in inputs_df.columns:
-        # Ensure we handle empty or malformed linked_input_id
-        linked_ids = outputs_df['linked_input_id'].dropna().unique()
+    
+    # --- FIX IS HERE ---
+    # The condition is now more robust. It checks that the DataFrames are not empty
+    # AND that they contain the necessary columns before attempting to access them.
+    # This prevents a KeyError when the app first starts.
+    if not inputs_df.empty and 'id' in inputs_df.columns and not outputs_df.empty and 'linked_input_id' in outputs_df.columns:
+        # We also drop NA values from the linking column to be safe
+        linked_ids = outputs_df['linked_input_id'].dropna()
         traced_inputs = inputs_df['id'].isin(linked_ids).sum()
+        
     coverage = (traced_inputs / len(inputs_df)) * 100 if not inputs_df.empty else 0
     col4.metric("Input→Output Trace Coverage", f"{coverage:.1f}%", help="Percentage of design inputs that have at least one design output linked to them.")
+    # --- END OF FIX ---
 
     st.divider()
     st.header("Project Timeline and Critical Path")
@@ -145,7 +150,6 @@ with tab3:
 # ======================================================================================
 # --- TAB 4: DHF SECTION DETAILS ---
 # ======================================================================================
-# The content for this tab is now controlled by the global sidebar selection.
 with tab4:
     st.header(f"DHF Section Details: {selection}")
     st.info("Use the sidebar to navigate between DHF sections. Changes made here will be reflected across the entire dashboard.")
@@ -168,13 +172,11 @@ with tab4:
         st.subheader("Project Timeline and Task Editor")
         st.warning("Directly edit project timelines, statuses, and dependencies.")
         tasks_list = ssm.get_data("project_management", "tasks")
-        # Use a unique key for the data_editor in this context
         edited_tasks = st.data_editor(tasks_list, key="main_task_editor", num_rows="dynamic", use_container_width=True)
         if edited_tasks != tasks_list:
             ssm.update_data(edited_tasks, "project_management", "tasks")
             st.success("Project tasks updated!")
             st.rerun()
     else:
-        # This logic now correctly renders the selected page inside tab4
         page_module = PAGES[selection]
         page_module.render(ssm)
