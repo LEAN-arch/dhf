@@ -1,8 +1,7 @@
 # File: dhf_dashboard/utils/session_state_manager.py
-# SME Note: This is the definitive, fully populated data model. It adds mock data
-# for all previously empty sections (Reviews, Validation, Transfer, Changes) and
-# ensures all data types and keys are correct to prevent any errors, providing a
-# complete "out-of-the-box" experience.
+# SME Note: This is the definitive, fully populated data model. This version
+# specifically enhances the 'action_items' list to provide a richer, more
+# representative dataset for the dashboard plots and analytics.
 
 import streamlit as st
 from datetime import date, timedelta
@@ -13,15 +12,16 @@ class SessionStateManager:
     professional-grade Design Assurance dashboard.
     """
     def __init__(self):
-        # Incrementing version to 10 to guarantee a fresh, fully populated data load.
-        CURRENT_DATA_VERSION = 10
+        # Incrementing version to 11 to load the new action items.
+        CURRENT_DATA_VERSION = 11
 
         if ('dhf_data' not in st.session_state or
             st.session_state.dhf_data.get('data_version') != CURRENT_DATA_VERSION):
 
-            st.toast(f"Loading Definitive Data Model (v{CURRENT_DATA_VERSION})...")
+            st.toast(f"Loading Enriched Data Model (v{CURRENT_DATA_VERSION})...")
 
             base_date = date(2024, 1, 15)
+            current_date = date.today() # Used for setting realistic due dates
 
             st.session_state.dhf_data = {
                 "data_version": CURRENT_DATA_VERSION,
@@ -68,33 +68,39 @@ class SessionStateManager:
                         {"id": "DO-006", "title": "Biocompatibility Test Protocol", "phase": "V&V", "status": "Draft", "linked_input_id": "RC-002"},
                     ]
                 },
-                "design_reviews": { # POPULATED
+                "design_reviews": {
                     "reviews":[
-                        {"date": date(2024, 5, 10), "attendees": "A. Weber, B. Chen, F. Green", "notes": "Phase 1 Gate Review completed. Approved to proceed to detailed design. Key action items on material sourcing.", "is_gate_review": True, "action_items": [
+                        {"date": date(2024, 5, 10), "attendees": "A. Weber, B. Chen, F. Green, C. Day, D. Evans", "notes": "Phase 1 Gate Review completed. Approved to proceed to detailed design. Key action items on material sourcing and software architecture.", "is_gate_review": True,
+                         # --- ENHANCED ACTION ITEMS ---
+                         "action_items": [
                             {"id": "AI-DR1-01", "description": "Finalize biocompatible polymer selection from approved supplier list.", "owner": "B. Chen", "due_date": date(2024, 5, 24), "status": "Completed"},
-                            {"id": "AI-DR1-02", "description": "Update Risk Management File with outputs from this review.", "owner": "F. Green", "due_date": date(2024, 5, 17), "status": "In Progress"}
+                            {"id": "AI-DR1-02", "description": "Update Risk Management File with outputs from this review.", "owner": "F. Green", "due_date": date(2024, 5, 17), "status": "In Progress"}, # This will become Overdue
+                            {"id": "AI-DR1-03", "description": "Create detailed CAD models for manufacturing molds.", "owner": "B. Chen", "due_date": current_date + timedelta(days=30), "status": "In Progress"},
+                            {"id": "AI-DR1-04", "description": "Develop initial firmware for Bluetooth communication handshake.", "owner": "C. Day", "due_date": current_date + timedelta(days=45), "status": "Open"},
+                            {"id": "AI-DR1-05", "description": "Finalize drug stability protocol for combination testing.", "owner": "D. Evans", "due_date": current_date - timedelta(days=10), "status": "Open"}, # This will become Overdue
+                            {"id": "AI-DR1-06", "description": "Draft V&V Master Plan.", "owner": "F. Green", "due_date": current_date + timedelta(days=15), "status": "In Progress"}
                         ]}
                     ]
                 },
-                "design_verification": { # POPULATED and CORRECTED
+                "design_verification": {
                     "tests": [
                         {"id": "VER-001", "name": "Pill Diameter Test", "status": "Completed", "tmv_status": "N/A", "output_verified": "DO-004", "risk_control_verified_id": "SR-001"},
                         {"id": "VER-002", "name": "Dose Accuracy Assay", "status": "In Progress", "tmv_status": "Required", "output_verified": "DO-005", "risk_control_verified_id": "RC-001"},
                         {"id": "VER-003", "name": "ISO 10993 Biocompatibility Study", "status": "Not Started", "tmv_status": "Completed", "output_verified": "DO-006", "risk_control_verified_id": "RC-002"},
                     ]
                 },
-                "design_validation": { # POPULATED
+                "design_validation": {
                     "studies": [
                         {"id": "VAL-001", "study_name": "Simulated Use Human Factors Study (n=15)", "user_need_validated": "UN-001", "risk_control_effectiveness": True, "result": "In Progress", "report_file": ""}
                     ]
                 },
-                "design_transfer": { # POPULATED
+                "design_transfer": {
                     "activities": [
                         {"activity": "Finalize Device Master Record (DMR)", "responsible_party": "Quality Eng.", "status": "In Progress", "completion_date": None, "evidence_link": ""},
                         {"activity": "Validate Automated Assembly Line (IQ/OQ)", "responsible_party": "Mfg. Eng.", "status": "Not Started", "completion_date": None, "evidence_link": ""}
                     ]
                 },
-                "design_changes": { # POPULATED
+                "design_changes": {
                     "changes": [
                         {"id": "DCR-001", "description": "Change battery supplier from BatteryCorp to PowerPlus for improved cycle life.", "reason": "Improved reliability based on new test data.", "impact_analysis": "Minimal impact. PowerPlus battery is form-fit-function equivalent. Requires regression testing of power management software.", "approval_status": "Pending", "approval_date": None}
                     ]
@@ -104,7 +110,7 @@ class SessionStateManager:
                     "supplier_audits": [{"supplier": "PillCasing Inc.", "status": "Pass", "date": "2024-03-15"}, {"supplier": "BatteryCorp", "status": "Pass with Observations", "date": "2024-04-20"}],
                     "continuous_improvement": [{"date": "2024-03-10", "area": "Documentation", "impact": 15}, {"date": "2024-05-20", "area": "Testing", "impact": 10}],
                 },
-                "project_management": { # SIGN-OFFS ARE DICTIONARIES
+                "project_management": {
                     "tasks": [
                         {"id": "NEEDS", "name": "User Needs", "start_date": base_date, "end_date": base_date + timedelta(days=14), "status": "Completed", "completion_pct": 100, "sign_offs": {"R&D": "✅", "Quality": "✅", "Marketing": "✅"}},
                         {"id": "INPUTS", "name": "Design Inputs", "start_date": base_date + timedelta(days=15), "end_date": base_date + timedelta(days=30), "status": "Completed", "completion_pct": 100, "sign_offs": {"R&D": "✅", "Quality": "✅", "Regulatory": "✅"}},
