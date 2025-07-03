@@ -1,6 +1,7 @@
 # File: dhf_dashboard/utils/session_state_manager.py
-# SME Note: This is the definitive, fully populated, and untruncated data model.
-# It contains complete data for every section to ensure a full "out-of-the-box" experience.
+# SME Note: This is the definitive, fully populated data model. It names
+# JOSE BAUTISTA as the main Quality Lead and assigns relevant tasks and
+# responsibilities to him for a personalized experience.
 
 import streamlit as st
 from datetime import date, timedelta
@@ -11,13 +12,13 @@ class SessionStateManager:
     professional-grade Design Assurance dashboard.
     """
     def __init__(self):
-        # Incrementing version to 14 to load the final, most comprehensive data model.
-        CURRENT_DATA_VERSION = 14
+        # Incrementing version to 15 to load the personalized data.
+        CURRENT_DATA_VERSION = 15
 
         if ('dhf_data' not in st.session_state or
             st.session_state.dhf_data.get('data_version') != CURRENT_DATA_VERSION):
 
-            st.toast(f"Loading Definitive DHF Data Model (v{CURRENT_DATA_VERSION})...")
+            st.toast(f"Loading Personalized Data Model (v{CURRENT_DATA_VERSION})...")
 
             base_date = date(2024, 1, 15)
             current_date = date.today()
@@ -32,7 +33,7 @@ class SessionStateManager:
                         {"role": "Device Engineer", "name": "Bob Chen", "responsibility": "Hardware design, material selection, and mechanical testing."},
                         {"role": "Software Engineer", "name": "Charlie Day", "responsibility": "Embedded firmware, mobile app development, and cybersecurity."},
                         {"role": "Pharma Scientist", "name": "Diana Evans", "responsibility": "Drug formulation, stability studies, and release profile analysis."},
-                        {"role": "Quality Engineer", "name": "Frank Green", "responsibility": "DHF owner, V&V strategy, Risk Management, and regulatory compliance."}
+                        {"role": "Quality Lead", "name": "JOSE BAUTISTA", "responsibility": "DHF owner, V&V strategy, Risk Management, and regulatory compliance."}
                     ],
                 },
                 "risk_management_file": {
@@ -80,14 +81,14 @@ class SessionStateManager:
                 },
                 "design_reviews": {
                     "reviews":[
-                        {"date": date(2024, 5, 10), "attendees": "A. Weber, B. Chen, F. Green, C. Day, D. Evans", "notes": "Phase 1 Gate Review completed. Approved to proceed to detailed design. Key action items on material sourcing and software architecture.", "is_gate_review": True,
+                        {"date": date(2024, 5, 10), "attendees": "A. Weber, B. Chen, JOSE BAUTISTA, C. Day, D. Evans", "notes": "Phase 1 Gate Review completed. Approved to proceed to detailed design. Key action items on material sourcing and software architecture.", "is_gate_review": True,
                          "action_items": [
                             {"id": "AI-DR1-01", "description": "Finalize biocompatible polymer selection from approved supplier list.", "owner": "B. Chen", "due_date": date(2024, 5, 24), "status": "Completed"},
-                            {"id": "AI-DR1-02", "description": "Update Risk Management File with outputs from this review.", "owner": "F. Green", "due_date": current_date - timedelta(days=20), "status": "In Progress"},
+                            {"id": "AI-DR1-02", "description": "Update Risk Management File with outputs from this review.", "owner": "JOSE BAUTISTA", "due_date": current_date - timedelta(days=20), "status": "In Progress"},
                             {"id": "AI-DR1-03", "description": "Create detailed CAD models for manufacturing molds.", "owner": "B. Chen", "due_date": current_date + timedelta(days=30), "status": "In Progress"},
                             {"id": "AI-DR1-04", "description": "Develop initial firmware for Bluetooth communication handshake.", "owner": "C. Day", "due_date": current_date + timedelta(days=45), "status": "Open"},
                             {"id": "AI-DR1-05", "description": "Finalize drug stability protocol for combination testing.", "owner": "D. Evans", "due_date": current_date - timedelta(days=10), "status": "Open"},
-                            {"id": "AI-DR1-06", "description": "Draft V&V Master Plan.", "owner": "F. Green", "due_date": current_date + timedelta(days=15), "status": "In Progress"}
+                            {"id": "AI-DR1-06", "description": "Draft V&V Master Plan.", "owner": "JOSE BAUTISTA", "due_date": current_date + timedelta(days=15), "status": "In Progress"}
                         ]}
                     ]
                 },
@@ -103,8 +104,8 @@ class SessionStateManager:
                     "activities": [
                         {"activity": "Installation Qualification (IQ) - Assembly Line A", "responsible_party": "Mfg. Eng.", "status": "Completed", "completion_date": date(2024, 6, 1), "evidence_link": "IQ-RPT-01.pdf"},
                         {"activity": "Operational Qualification (OQ) - Assembly Line A", "responsible_party": "Mfg. Eng.", "status": "In Progress", "completion_date": None, "evidence_link": ""},
-                        {"activity": "Performance Qualification (PQ) - Assembly Line A", "responsible_party": "Quality Eng.", "status": "Not Started", "completion_date": None, "evidence_link": ""},
-                        {"activity": "Finalize Device Master Record (DMR)", "responsible_party": "Quality Eng.", "status": "In Progress", "completion_date": None, "evidence_link": ""}
+                        {"activity": "Performance Qualification (PQ) - Assembly Line A", "responsible_party": "JOSE BAUTISTA", "status": "Not Started", "completion_date": None, "evidence_link": ""},
+                        {"activity": "Finalize Device Master Record (DMR)", "responsible_party": "JOSE BAUTISTA", "status": "In Progress", "completion_date": None, "evidence_link": ""}
                     ]
                 },
                 "design_changes": {"changes": [{"id": "DCR-001", "description": "Change battery supplier from BatteryCorp to PowerPlus for improved cycle life.", "reason": "Improved reliability based on new test data.", "impact_analysis": "Minimal impact. PowerPlus battery is form-fit-function equivalent. Requires regression testing of power management software.", "approval_status": "Pending", "approval_date": None}]},
