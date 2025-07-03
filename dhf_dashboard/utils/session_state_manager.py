@@ -1,7 +1,6 @@
 # File: dhf_dashboard/utils/session_state_manager.py
-# SME Note: This is the definitive, fully populated data model. This version
-# specifically enhances the 'action_items' list to provide a richer, more
-# representative dataset for the dashboard plots and analytics.
+# SME Note: This is the definitive, fully populated, and untruncated data model.
+# It contains complete data for every section to ensure a full "out-of-the-box" experience.
 
 import streamlit as st
 from datetime import date, timedelta
@@ -12,28 +11,28 @@ class SessionStateManager:
     professional-grade Design Assurance dashboard.
     """
     def __init__(self):
-        # Incrementing version to 11 to load the new action items.
-        CURRENT_DATA_VERSION = 11
+        # Incrementing version to 14 to load the final, most comprehensive data model.
+        CURRENT_DATA_VERSION = 14
 
         if ('dhf_data' not in st.session_state or
             st.session_state.dhf_data.get('data_version') != CURRENT_DATA_VERSION):
 
-            st.toast(f"Loading Enriched Data Model (v{CURRENT_DATA_VERSION})...")
+            st.toast(f"Loading Definitive DHF Data Model (v{CURRENT_DATA_VERSION})...")
 
             base_date = date(2024, 1, 15)
-            current_date = date.today() # Used for setting realistic due dates
+            current_date = date.today()
 
             st.session_state.dhf_data = {
                 "data_version": CURRENT_DATA_VERSION,
                 "design_plan": {
                     "project_name": "Smart-Pill Drug Delivery System (SP-DDS)",
-                    "scope": "This project covers the design and development of a new combination product, the 'Smart-Pill', intended for the targeted oral delivery of drug XYZ for treating chronic condition ABC. The system comprises a swallowable electronic capsule (device) containing a payload of drug XYZ (drug).",
+                    "scope": "This project covers the design and development of a new combination product, the 'Smart-Pill', intended for the targeted oral delivery of drug XYZ for treating chronic condition ABC. The system comprises a swallowable electronic capsule (device) containing a payload of drug XYZ (drug), a companion mobile application for monitoring, and a cloud-based data backend.",
                     "team_members": [
-                        {"role": "Project Lead", "name": "Dr. Alice Weber", "responsibility": "Overall project oversight."},
-                        {"role": "Device Engineer", "name": "Bob Chen", "responsibility": "Hardware design, material selection."},
-                        {"role": "Software Engineer", "name": "Charlie Day", "responsibility": "Embedded software, mobile app."},
-                        {"role": "Pharma Scientist", "name": "Diana Evans", "responsibility": "Drug formulation, stability."},
-                        {"role": "Quality Engineer", "name": "JOSE BAUTISTA", "responsibility": "DHF owner, V&V strategy, Risk Mgmt."}
+                        {"role": "Project Lead", "name": "Dr. Alice Weber", "responsibility": "Overall project oversight and final DHF approval."},
+                        {"role": "Device Engineer", "name": "Bob Chen", "responsibility": "Hardware design, material selection, and mechanical testing."},
+                        {"role": "Software Engineer", "name": "Charlie Day", "responsibility": "Embedded firmware, mobile app development, and cybersecurity."},
+                        {"role": "Pharma Scientist", "name": "Diana Evans", "responsibility": "Drug formulation, stability studies, and release profile analysis."},
+                        {"role": "Quality Engineer", "name": "Frank Green", "responsibility": "DHF owner, V&V strategy, Risk Management, and regulatory compliance."}
                     ],
                 },
                 "risk_management_file": {
@@ -45,15 +44,25 @@ class SessionStateManager:
                         {"hazard_id": "H-005", "description": "Pill casing cracks (choking hazard)", "initial_S": 5, "initial_O": 1, "initial_D": 2, "final_S": 5, "final_O": 1, "final_D": 1},
                     ],
                     "historical_rpn": [{"date": "2024-02-01", "total_rpn": 350}, {"date": "2024-04-01", "total_rpn": 210}, {"date": "2024-06-01", "total_rpn": 95}],
+                    "fta_document_ref": "FTA-001 - System Safety Analysis",
+                    "dfmea": [
+                        {"id": "DFMEA-01", "failure_mode": "Pill casing seal failure", "potential_effect": "Drug leakage, incorrect dose", "S": 5, "O": 2, "D": 2, "mitigation": "Redesigned seal geometry, add seal integrity test."},
+                        {"id": "DFMEA-02", "failure_mode": "Battery shorts circuit", "potential_effect": "Device failure, potential thermal event", "S": 5, "O": 1, "D": 3, "mitigation": "Use medically certified battery with short-circuit protection."},
+                        {"id": "DFMEA-03", "failure_mode": "Software algorithm miscalculates release time", "potential_effect": "Incorrect dose timing", "S": 4, "O": 3, "D": 2, "mitigation": "Add checksums, implement robust unit testing, code reviews."},
+                    ],
+                    "pfmea": [
+                        {"id": "PFMEA-01", "failure_mode": "Incorrect polymer mixing ratio", "potential_effect": "Casing brittle, fails biocompatibility", "S": 5, "O": 2, "D": 4, "mitigation": "Automated mixing system with ratio alarms."},
+                        {"id": "PFMEA-02", "failure_mode": "Contamination during drug filling", "potential_effect": "Adverse patient reaction", "S": 5, "O": 2, "D": 3, "mitigation": "Perform filling in certified cleanroom, regular environmental monitoring."},
+                        {"id": "PFMEA-03", "failure_mode": "Incorrect torque on sealing machine", "potential_effect": "Improper seal, drug leakage", "S": 4, "O": 3, "D": 3, "mitigation": "Use calibrated torque wrench, regular calibration schedule."},
+                    ]
                 },
-                "human_factors": {
-                    "use_scenarios": [{"use_scenario": "Patient takes daily pill", "user_task": "Swallows pill with water", "potential_use_error": "Takes pill without water", "potential_harm": "Pill lodges in esophagus", "related_hazard_id": "H-005"}]
-                },
+                "human_factors": {"use_scenarios": [{"use_scenario": "Patient takes daily pill", "user_task": "Swallows pill with water", "potential_use_error": "Takes pill without water", "potential_harm": "Pill lodges in esophagus", "related_hazard_id": "H-005"}]},
                 "design_inputs": {
                     "requirements": [
                         {"id": "UN-001", "source_type": "User Need", "description": "The system must be easy for an elderly patient to use daily without assistance.", "is_risk_control": False, "related_hazard_id": ""},
                         {"id": "UN-002", "source_type": "User Need", "description": "The pill must be comfortable to swallow.", "is_risk_control": False, "related_hazard_id": ""},
                         {"id": "SR-001", "source_type": "QSR (Device)", "description": "The pill casing shall have a diameter less than 8mm.", "is_risk_control": False, "related_hazard_id": ""},
+                        {"id": "SR-002", "source_type": "QSR (Device)", "description": "Device must be compatible with EtO sterilization.", "is_risk_control": False, "related_hazard_id": ""},
                         {"id": "RC-001", "source_type": "Risk Control", "description": "The release mechanism shall be tested to a 6-sigma reliability for dose accuracy.", "is_risk_control": True, "related_hazard_id": "H-001"},
                         {"id": "RC-002", "source_type": "Risk Control", "description": "Casing material must pass all ISO 10993 biocompatibility tests.", "is_risk_control": True, "related_hazard_id": "H-002"},
                     ]
@@ -62,7 +71,8 @@ class SessionStateManager:
                     "documents": [
                         {"id": "DO-001", "title": "User Needs Document", "phase": "User Needs", "status": "Approved", "linked_input_id": "UN-001"},
                         {"id": "DO-002", "title": "System Requirements Spec", "phase": "Design Inputs", "status": "Approved", "linked_input_id": "UN-002"},
-                        {"id": "DO-003", "title": "Risk Management Plan", "phase": "Design Inputs", "status": "Approved", "linked_input_id": "RC-001"},
+                        {"id": "RPT-001", "title": "DOE Report for Molding Parameters", "phase": "Design Outputs", "status": "Approved", "linked_input_id": "SR-001"},
+                        {"id": "SPEC-001", "title": "EtO Sterilization Cycle Specification", "phase": "Design Outputs", "status": "Approved", "linked_input_id": "SR-002"},
                         {"id": "DO-004", "title": "Pill Casing Final CAD Model", "phase": "Design Outputs", "status": "In Review", "linked_input_id": "SR-001"},
                         {"id": "DO-005", "title": "Dose Release Mechanism Spec", "phase": "Design Outputs", "status": "Draft", "linked_input_id": "RC-001"},
                         {"id": "DO-006", "title": "Biocompatibility Test Protocol", "phase": "V&V", "status": "Draft", "linked_input_id": "RC-002"},
@@ -71,13 +81,12 @@ class SessionStateManager:
                 "design_reviews": {
                     "reviews":[
                         {"date": date(2024, 5, 10), "attendees": "A. Weber, B. Chen, F. Green, C. Day, D. Evans", "notes": "Phase 1 Gate Review completed. Approved to proceed to detailed design. Key action items on material sourcing and software architecture.", "is_gate_review": True,
-                         # --- ENHANCED ACTION ITEMS ---
                          "action_items": [
                             {"id": "AI-DR1-01", "description": "Finalize biocompatible polymer selection from approved supplier list.", "owner": "B. Chen", "due_date": date(2024, 5, 24), "status": "Completed"},
-                            {"id": "AI-DR1-02", "description": "Update Risk Management File with outputs from this review.", "owner": "F. Green", "due_date": date(2024, 5, 17), "status": "In Progress"}, # This will become Overdue
+                            {"id": "AI-DR1-02", "description": "Update Risk Management File with outputs from this review.", "owner": "F. Green", "due_date": current_date - timedelta(days=20), "status": "In Progress"},
                             {"id": "AI-DR1-03", "description": "Create detailed CAD models for manufacturing molds.", "owner": "B. Chen", "due_date": current_date + timedelta(days=30), "status": "In Progress"},
                             {"id": "AI-DR1-04", "description": "Develop initial firmware for Bluetooth communication handshake.", "owner": "C. Day", "due_date": current_date + timedelta(days=45), "status": "Open"},
-                            {"id": "AI-DR1-05", "description": "Finalize drug stability protocol for combination testing.", "owner": "D. Evans", "due_date": current_date - timedelta(days=10), "status": "Open"}, # This will become Overdue
+                            {"id": "AI-DR1-05", "description": "Finalize drug stability protocol for combination testing.", "owner": "D. Evans", "due_date": current_date - timedelta(days=10), "status": "Open"},
                             {"id": "AI-DR1-06", "description": "Draft V&V Master Plan.", "owner": "F. Green", "due_date": current_date + timedelta(days=15), "status": "In Progress"}
                         ]}
                     ]
@@ -89,26 +98,27 @@ class SessionStateManager:
                         {"id": "VER-003", "name": "ISO 10993 Biocompatibility Study", "status": "Not Started", "tmv_status": "Completed", "output_verified": "DO-006", "risk_control_verified_id": "RC-002"},
                     ]
                 },
-                "design_validation": {
-                    "studies": [
-                        {"id": "VAL-001", "study_name": "Simulated Use Human Factors Study (n=15)", "user_need_validated": "UN-001", "risk_control_effectiveness": True, "result": "In Progress", "report_file": ""}
-                    ]
-                },
+                "design_validation": {"studies": [{"id": "VAL-001", "study_name": "Simulated Use Human Factors Study (n=15)", "user_need_validated": "UN-001", "risk_control_effectiveness": True, "result": "In Progress", "report_file": ""}]},
                 "design_transfer": {
                     "activities": [
-                        {"activity": "Finalize Device Master Record (DMR)", "responsible_party": "Quality Eng.", "status": "In Progress", "completion_date": None, "evidence_link": ""},
-                        {"activity": "Validate Automated Assembly Line (IQ/OQ)", "responsible_party": "Mfg. Eng.", "status": "Not Started", "completion_date": None, "evidence_link": ""}
+                        {"activity": "Installation Qualification (IQ) - Assembly Line A", "responsible_party": "Mfg. Eng.", "status": "Completed", "completion_date": date(2024, 6, 1), "evidence_link": "IQ-RPT-01.pdf"},
+                        {"activity": "Operational Qualification (OQ) - Assembly Line A", "responsible_party": "Mfg. Eng.", "status": "In Progress", "completion_date": None, "evidence_link": ""},
+                        {"activity": "Performance Qualification (PQ) - Assembly Line A", "responsible_party": "Quality Eng.", "status": "Not Started", "completion_date": None, "evidence_link": ""},
+                        {"activity": "Finalize Device Master Record (DMR)", "responsible_party": "Quality Eng.", "status": "In Progress", "completion_date": None, "evidence_link": ""}
                     ]
                 },
-                "design_changes": {
-                    "changes": [
-                        {"id": "DCR-001", "description": "Change battery supplier from BatteryCorp to PowerPlus for improved cycle life.", "reason": "Improved reliability based on new test data.", "impact_analysis": "Minimal impact. PowerPlus battery is form-fit-function equivalent. Requires regression testing of power management software.", "approval_status": "Pending", "approval_date": None}
-                    ]
-                },
+                "design_changes": {"changes": [{"id": "DCR-001", "description": "Change battery supplier from BatteryCorp to PowerPlus for improved cycle life.", "reason": "Improved reliability based on new test data.", "impact_analysis": "Minimal impact. PowerPlus battery is form-fit-function equivalent. Requires regression testing of power management software.", "approval_status": "Pending", "approval_date": None}]},
                 "quality_system": {
-                    "capa_records": [{"id": "CAPA-01", "status": "Closed", "source": "Internal Audit"}, {"id": "CAPA-02", "status": "Open", "source": "Supplier Corrective Action"}, {"id": "CAPA-03", "status": "Open", "source": "Complaint Investigation"}],
+                    "capa_records": [{"id": "CAPA-01", "status": "Closed", "source": "Internal Audit"}, {"id": "CAPA-02", "status": "Open", "source": "Supplier Corrective Action"}],
                     "supplier_audits": [{"supplier": "PillCasing Inc.", "status": "Pass", "date": "2024-03-15"}, {"supplier": "BatteryCorp", "status": "Pass with Observations", "date": "2024-04-20"}],
                     "continuous_improvement": [{"date": "2024-03-10", "area": "Documentation", "impact": 15}, {"date": "2024-05-20", "area": "Testing", "impact": 10}],
+                    "cgmp_compliance": {
+                        "stability_studies": [
+                            {"id": "STAB-01", "duration": "3 Months", "condition": "Accelerated", "status": "Completed - Pass"},
+                            {"id": "STAB-02", "duration": "6 Months", "condition": "Real-Time", "status": "In Progress"}
+                        ],
+                        "batch_record_review": {"total": 5, "passed": 4, "failed": 1}
+                    }
                 },
                 "project_management": {
                     "tasks": [
@@ -119,6 +129,12 @@ class SessionStateManager:
                         {"id": "TRANSFER", "name": "Design Transfer", "start_date": base_date + timedelta(days=181), "end_date": base_date + timedelta(days=210), "status": "Not Started", "completion_pct": 0, "sign_offs": {"Manufacturing": "Pending", "Quality": "Pending"}},
                     ]
                 },
+                "quality_by_design": {
+                    "elements": [
+                        {"cqa": "Accurate Drug Dosage (10mg ± 0.5mg)", "links_to_req": "RC-001", "cm_attributes": ["Drug Particle Size Distribution", "Polymer Viscosity"], "cp_parameters": ["Molding Temperature", "Nozzle Pressure", "Mixing Speed"]},
+                        {"cqa": "Casing Biocompatibility", "links_to_req": "RC-002", "cm_attributes": ["Polymer Grade Purity", "Absence of Leachables/Extractables"], "cp_parameters": ["Curing Time", "Sterilization Cycle Parameters"]}
+                    ]
+                }
             }
 
     def get_data(self, primary_key, secondary_key=None):
