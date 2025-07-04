@@ -118,7 +118,7 @@ def get_cached_df(data: List[Dict[str, Any]]) -> pd.DataFrame:
 def render_dhf_completeness_panel(ssm: SessionStateManager, tasks_df: pd.DataFrame) -> None:
     """
     Renders the DHF completeness and gate readiness panel.
-    Displays DHF phases as expanders and a project timeline Gantt chart.
+    Displays DHF phases as subheaders and a project timeline Gantt chart.
     """
     st.subheader("1. DHF Completeness & Gate Readiness")
     st.markdown("Monitor the flow of Design Controls from inputs to outputs, including cross-functional sign-offs and DHF document status.")
@@ -130,9 +130,8 @@ def render_dhf_completeness_panel(ssm: SessionStateManager, tasks_df: pd.DataFra
         if not tasks_raw:
             st.warning("No project management tasks found.")
             return
-        
-        # FIX: The loop of expanders was removed. Now we just iterate and display content.
-        # This prevents nesting expanders, which is not allowed by Streamlit.
+
+        # FIX: The loop of expanders was replaced with subheaders to prevent nesting.
         for task in tasks_raw:
             task_name = task.get('name', 'N/A')
             st.subheader(f"Phase: {task_name}")
@@ -337,6 +336,7 @@ def render_qbd_and_cgmp_panel(ssm: SessionStateManager) -> None:
         except Exception as e:
             st.error("Could not render CGMP readiness."); logger.error(f"Error in render_qbd_and_cgmp_panel (CGMP): {e}", exc_info=True)
 
+
 def render_audit_and_improvement_dashboard(ssm: SessionStateManager) -> None:
     """Renders the audit readiness and continuous improvement dashboard."""
     st.subheader("4. Audit & Continuous Improvement Readiness")
@@ -416,7 +416,13 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
         initial_rpn_sum = hazards_df['initial_rpn'].sum(); final_rpn_sum = hazards_df['final_rpn'].sum()
         risk_reduction_pct = ((initial_rpn_sum - final_rpn_sum) / initial_rpn_sum) * 100 if initial_rpn_sum > 0 else 100
         risk_score = max(0, risk_reduction_pct)
-    reviews_data = ssm.get_data("design_reviews", "reviews"); action_items = [item for r in reviews_data for item in r.get("action_items", [])]
+    reviews_data = ssm.get_data("design_reviews", "reviews")
+    action_items = []
+    for review in reviews_data:
+        review_date = pd.to_datetime(review.get('date'))
+        for item in review.get('action_items', []):
+            item['review_date'] = review_date
+            action_items.append(item)
     action_items_df = get_cached_df(action_items); execution_score = 100
     if not action_items_df.empty:
         open_items = action_items_df[action_items_df['status'] != 'Completed']
@@ -462,15 +468,25 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
     st.divider()
     st.subheader("Action Item Burn-down (Last 30 Days)")
     if not action_items_df.empty:
-        df = action_items_df.copy(); df['due_date'] = pd.to_datetime(df['due_date'], errors='coerce'); df['created_date'] = df['due_date'] - pd.to_timedelta(np.random.randint(10, 30, len(df)), unit='d')
+        df = action_items_df.copy()
+        df['created_date'] = pd.to_datetime(df['review_date']) + pd.to_timedelta(np.random.randint(0, 2, len(df)), unit='d')
+        completed_mask = df['status'] == 'Completed'
+        completed_items = df[completed_mask].copy()
+        if not completed_items.empty:
+            lifespan = (pd.to_datetime(completed_items['due_date']) - completed_items['created_date']).dt.days
+            completion_days = [np.random.randint(1, max(2, int(d))) for d in lifespan]
+            completed_items['completion_date'] = completed_items['created_date'] + pd.to_timedelta(completion_days, unit='d')
+            df.loc[completed_mask, 'completion_date'] = completed_items['completion_date']
+        else: df['completion_date'] = pd.NaT
         today = pd.to_datetime('today'); date_range = pd.date_range(end=today, periods=30, freq='D')
-        opened_series = df.set_index('created_date').resample('D').size().reindex(date_range, fill_value=0)
-        completed_items = df[df['status']=='Completed'].copy()
-        completed_items['completion_date'] = completed_items['due_date'] - pd.to_timedelta(np.random.randint(0, 5, len(completed_items)), unit='d')
-        closed_series = completed_items.set_index('completion_date').resample('D').size().reindex(date_range, fill_value=0)
-        net_change = opened_series - closed_series; initial_open = len(df[df['created_date'] < date_range.min()]) - len(completed_items[completed_items['completion_date'] < date_range.min()])
-        burndown = net_change.cumsum() + initial_open
-        fig = go.Figure(); fig.add_trace(go.Scatter(x=burndown.index, y=burndown.values, mode='lines+markers', name='Open Items', fill='tozeroy'))
+        daily_open_counts = []
+        for day in date_range:
+            created_before_day = df[df['created_date'] <= day]
+            completed_on_or_before_day = df[df['completion_date'] <= day]
+            net_open = len(created_before_day) - len(completed_on_or_before_day)
+            daily_open_counts.append(net_open)
+        burndown_df = pd.DataFrame({'date': date_range, 'open_items': daily_open_counts})
+        fig = go.Figure(); fig.add_trace(go.Scatter(x=burndown_df['date'], y=burndown_df['open_items'], mode='lines+markers', name='Open Items', fill='tozeroy', line=dict(color='rgb(0,100,80)'), hovertemplate='<b>%{x|%Y-%m-%d}</b><br>Open Items: %{y}<extra></extra>'))
         fig.update_layout(title="Trend of Total Open Action Items", yaxis_title="Number of Open Items", height=300); st.plotly_chart(fig, use_container_width=True)
     else: st.caption("No action item data to generate a burn-down chart.")
     st.divider()
@@ -507,7 +523,7 @@ def render_advanced_analytics_tab(ssm: SessionStateManager):
         try:
             tasks_df_to_edit = pd.DataFrame(ssm.get_data("project_management", "tasks"))
             tasks_df_to_edit['start_date'] = pd.to_datetime(tasks_df_to_edit['start_date'], errors='coerce'); tasks_df_to_edit['end_date'] = pd.to_datetime(tasks_df_to_edit['end_date'], errors='coerce')
-            original_df = tasks_df_to_edit.copy() # Capture original state for comparison
+            original_df = tasks_df_to_edit.copy()
             edited_df = st.data_editor(
                 tasks_df_to_edit, key="main_task_editor", num_rows="dynamic", use_container_width=True,
                 column_config={"start_date": st.column_config.DateColumn("Start Date", format="YYYY-MM-DD", required=True), "end_date": st.column_config.DateColumn("End Date", format="YYYY-MM-DD", required=True)})
@@ -627,7 +643,6 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
                 formula = 'seal_strength ~ temperature * pressure'; model = ols(formula, data=doe_df).fit()
                 anova_table = sm.stats.anova_lm(model, typ=2)
                 st.markdown("**Analysis of Variance (ANOVA) Table**"); st.caption("This table shows which factors significantly impact Seal Strength. Look for p-values (PR(>F)) < 0.05.")
-                # FIX: Replaced deprecated `applymap` with `map`
                 st.dataframe(anova_table.style.map(lambda x: 'background-color: #eaf5ea' if x < 0.05 else '', subset=['PR(>F)']))
                 col1, col2 = st.columns(2)
                 with col1:
@@ -758,7 +773,6 @@ def render_compliance_guide_tab():
     st.success("""#### The Core Principle: Verification vs. Validation
 - **Verification (Horizontal Arrows):** Answers the question, **"Are we building the product right?"** It is the process of confirming that a design output meets its specified input requirements (e.g., does the code correctly implement the detailed design?).
 - **Validation (Top-Level Arrow):** Answers the question, **"Are we building the right product?"** It is the process of confirming that the final, finished product meets the user's actual needs and its intended use.""")
-
 
 # ==============================================================================
 # --- MAIN APPLICATION LOGIC ---
