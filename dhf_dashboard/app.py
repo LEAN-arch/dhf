@@ -24,6 +24,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 from scipy import stats
+import matplotlib.pyplot as plt
 
 # --- Robust Path Correction Block ---
 # This ensures that the application can find its own modules when run as a script.
@@ -419,11 +420,12 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
     
     # FIX: Use a deep copy of the action items to prevent session state mutation.
     action_items_for_burndown = []
-    for review in copy.deepcopy(reviews_data):
-        review_date = pd.to_datetime(review.get('date'))
-        for item_data in review.get('action_items', []):
-            item_data['review_date'] = review_date
-            action_items_for_burndown.append(item_data)
+    if reviews_data:
+        for review in copy.deepcopy(reviews_data):
+            review_date = pd.to_datetime(review.get('date'))
+            for item_data in review.get('action_items', []):
+                item_data['review_date'] = review_date
+                action_items_for_burndown.append(item_data)
             
     original_action_items = [item for r in reviews_data for item in r.get("action_items", [])]
     action_items_df = get_cached_df(original_action_items)
@@ -473,18 +475,16 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
         st.metric(label="Overdue Action Items", value=overdue_actions_count, delta=overdue_actions_count, delta_color="inverse", help="Total number of action items from all design reviews that are past their due date.")
     st.divider()
     st.subheader("Action Item Burn-down (Last 30 Days)")
-    # FIX: Pass the deep-copied and enhanced list to the burndown logic
     burndown_df_source = get_cached_df(action_items_for_burndown)
     if not burndown_df_source.empty:
         df = burndown_df_source.copy()
-        # FIX: Ensure all date columns are consistently converted to datetime objects
         df['created_date'] = pd.to_datetime(df['review_date']) + pd.to_timedelta(np.random.randint(0, 2, len(df)), unit='d')
         df['due_date'] = pd.to_datetime(df['due_date'], errors='coerce')
         df['completion_date'] = pd.NaT 
         
         completed_mask = df['status'] == 'Completed'
         if completed_mask.any():
-            completed_items = df[completed_mask]
+            completed_items = df[completed_mask].copy()
             lifespan = (completed_items['due_date'] - completed_items['created_date']).dt.days.fillna(1).astype(int)
             lifespan = lifespan.apply(lambda d: max(1, d))
             completion_days = [np.random.randint(1, d + 1) for d in lifespan]
@@ -677,25 +677,32 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
         except Exception as e: st.error("Could not generate DOE plots."); logger.error(f"Error in DOE Analysis tool: {e}", exc_info=True)
 
 def render_machine_learning_lab_tab(ssm: SessionStateManager):
-    """Renders the Machine Learning Lab tab with predictive models."""
+    """Renders the Machine Learning Lab tab with professionally enhanced, interactive visualizations."""
     st.header("🤖 Machine Learning Lab")
     st.info("Utilize predictive models to forecast outcomes, enabling proactive quality control and project management.")
+
     try:
-        from sklearn.ensemble import RandomForestClassifier; from sklearn.linear_model import LogisticRegression
-        from sklearn.model_selection import train_test_split; from sklearn.metrics import confusion_matrix
+        from sklearn.ensemble import RandomForestClassifier
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.model_selection import train_test_split
+        from sklearn.metrics import confusion_matrix
+        import shap
     except ImportError:
-        st.error("This tab requires scikit-learn. Please install it (`pip install scikit-learn`) to enable ML features.", icon="🚨"); return
+        st.error("This tab requires `scikit-learn` and `shap`. Please install them (`pip install scikit-learn shap`) to enable ML features.", icon="🚨")
+        return
+
     ml_tabs = st.tabs(["Predictive Quality (Batch Failure)", "Predictive Project Risk (Task Delay)"])
+
     with ml_tabs[0]:
         st.subheader("Predictive Quality: Manufacturing Batch Failure")
         st.markdown("This model predicts whether a manufacturing batch will **Pass** or **Fail** based on its process parameters, *before* the batch is run.")
+
         with st.expander("The 'Why' and the 'How'"):
             st.markdown("#### The 'Why': Business Justification")
             st.markdown("""- **Proactive vs. Reactive:** Instead of discovering a failed batch during final inspection (reactive), this model predicts failure ahead of time (proactive).\n- **COPQ Reduction:** It significantly reduces the Cost of Poor Quality (COPQ) by preventing scrap, rework, and wasted materials.\n- **Process Understanding:** The model's *feature importances* tell engineers which process parameters have the biggest impact on quality, guiding process optimization efforts (like a DOE).""")
-            st.markdown("#### The 'How': Methodological Approach")
-            st.markdown("""We use a **Random Forest Classifier**. This is an *ensemble* model, meaning it builds many individual Decision Trees and then aggregates their votes to make a final prediction.\n- **Decision Tree:** A simple, flowchart-like model that makes decisions based on feature values (e.g., "Is `temperature` > 95°C?").\n- **Random Forest:** By combining hundreds of trees, each trained on a random subset of the data and features, the model becomes much more robust and accurate, reducing the risk of overfitting to the training data.""")
-            st.markdown("#### The 'How': In This Application")
-            st.markdown("1. We generate a synthetic dataset of 500 manufacturing batches with features like `temperature`, `pressure`, and `viscosity` and a `status` (Pass/Fail).\n2. We train a Random Forest Classifier on 80% of this data.\n3. We evaluate its performance on the remaining 20% (the test set) and display a **Confusion Matrix**.\n4. We show the **Feature Importances**, revealing which factors the model learned were most predictive of failure.")
+            st.markdown("#### The 'How': Advanced Interpretation with SHAP")
+            st.markdown("""We train a **Random Forest Classifier** and then use **SHAP (SHapley Additive exPlanations)** to interpret its predictions.\n- **SHAP Summary Plot:** This is a major upgrade from a simple feature importance chart. It shows not only *which* features are important but also *how* they impact the prediction. Red dots indicate high feature values, blue dots indicate low values. Dots to the right push the model towards predicting "Fail", while dots to the left push towards "Pass".\n- **Enhanced Confusion Matrix:** Our new matrix is a professional heatmap that includes clear labels and percentages for intuitive performance assessment.""")
+
         @st.cache_data
         def generate_and_train_quality_model():
             np.random.seed(42); n_samples = 500
@@ -706,50 +713,106 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
             X = df[['temperature', 'pressure', 'viscosity']]; y = df['status_code']
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
             model = RandomForestClassifier(n_estimators=100, random_state=42); model.fit(X_train, y_train)
-            return model, X, y_test, X_test
-        model, X, y_test, X_test = generate_and_train_quality_model()
+            return model, X_train, X_test, y_train, y_test
+        
+        model, X_train, X_test, y_train, y_test = generate_and_train_quality_model()
+        
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown("**Feature Importances**"); st.caption("Which process parameters most predict failure?")
-            importances = pd.DataFrame({'feature': X.columns, 'importance': model.feature_importances_}).sort_values('importance', ascending=True)
-            fig = px.bar(importances, x='importance', y='feature', orientation='h', title="Model Feature Importances")
-            fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10)); st.plotly_chart(fig, use_container_width=True)
+            st.markdown("**Model Performance (Test Set)**")
+            st.caption("How well did the model predict on unseen data?")
+            y_pred = model.predict(X_test)
+            cm = confusion_matrix(y_test, y_pred)
+            cm_percent = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+            
+            labels = [["True Negative", "False Positive"], ["False Negative", "True Positive"]]
+            annotations = [[f"{labels[i][j]}<br>{cm[i][j]}<br>({cm_percent[i][j]:.2%})" for j in range(2)] for i in range(2)]
+
+            fig = go.Figure(data=go.Heatmap(
+                   z=cm, x=['Predicted Pass', 'Predicted Fail'], y=['Actual Pass', 'Actual Fail'],
+                   hoverongaps=False, colorscale='Blues', showscale=False,
+                   text=annotations, texttemplate="%{text}"))
+            fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10), title_x=0.5, title_text="<b>Confusion Matrix</b>")
+            st.plotly_chart(fig, use_container_width=True)
+
         with col2:
-            st.markdown("**Model Performance (Test Set)**"); st.caption("How well did the model predict on unseen data?")
-            y_pred = model.predict(X_test); cm = confusion_matrix(y_test, y_pred)
-            fig = px.imshow(cm, text_auto=True, aspect="auto", labels=dict(x="Predicted", y="Actual", color="Count"), x=['Pass', 'Fail'], y=['Pass', 'Fail'], title="Confusion Matrix")
-            fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10)); st.plotly_chart(fig, use_container_width=True)
+            st.markdown("**Feature Impact on Prediction (SHAP)**")
+            st.caption("Which factors push the prediction to 'Fail' vs. 'Pass'?")
+            explainer = shap.TreeExplainer(model)
+            shap_values = explainer.shap_values(X_test)
+            
+            fig, ax = plt.subplots(figsize=(6, 4))
+            shap.summary_plot(shap_values[1], X_test, plot_type="bar", show=False)
+            st.pyplot(fig, use_container_width=True)
+
+        st.subheader("Deep Dive: How Feature Values Drive Failure")
+        st.markdown("The plot below shows each individual prediction from the test set. Red dots are high feature values, blue are low. For `temperature`, you can see high (red) values push the prediction towards failure (positive SHAP value), while low (blue) values push it towards passing.")
+        fig_shap_summary, ax_shap_summary = plt.subplots()
+        shap.summary_plot(shap_values[1], X_test, show=False, plot_size=(10, 4))
+        st.pyplot(fig_shap_summary)
+
     with ml_tabs[1]:
-        st.subheader("Predictive Project Risk: Task Delay")
-        st.markdown("This model uses historical data to predict the probability of future project tasks becoming **At-Risk** (i.e., delayed).")
+        st.subheader("Predictive Project Risk: Interactive Analysis")
+        st.markdown("This tool uses a trained model to forecast task delays and allows you to **drill down into the specific risk factors** for each task.")
+
         with st.expander("The 'Why' and the 'How'"):
-            st.markdown("#### The 'Why': Business Justification")
-            st.markdown("""- **Early Warning System:** Provides a data-driven forecast of which tasks are most likely to cause bottlenecks, allowing managers to intervene early.\n- **Improved Resource Allocation:** Helps focus management attention and resources on the highest-risk tasks.\n- **Beyond the Gantt Chart:** While a Gantt chart shows the plan, this model predicts deviations from the plan based on learned patterns.""")
-            st.markdown("#### The 'How': Methodological Approach")
-            st.markdown("We use **Logistic Regression**. Unlike linear regression which predicts a continuous value, logistic regression predicts a probability that an event will occur. It models the probability using the **sigmoid function**:")
-            st.latex(r''' P(\text{At-Risk}) = \frac{1}{1 + e^{-z}} \quad \text{where} \quad z = \beta_0 + \beta_1 X_1 + \dots + \beta_n X_n ''')
-            st.markdown("The model learns the `β` (beta) coefficients for each feature (e.g., `duration`, `num_dependencies`) to best predict the outcome.")
-            st.markdown("#### The 'How': In This Application")
-            st.markdown("1. We use the project's own task data, including completed and in-progress tasks, as a training set.\n2. We engineer features: `duration_days`, `num_dependencies`, and `is_critical`.\n3. We train a Logistic Regression model to distinguish between 'At Risk' and 'On Time' tasks.\n4. We use the trained model to predict the probability of delay for all 'Not Started' tasks, visualizing the results for easy interpretation.")
+            st.markdown("#### The 'Why': From Prediction to Actionable Insight")
+            st.markdown("""- **Beyond Forecasting:** It's not enough to know a task is at risk. A project manager must know *why* to take effective action.\n- **Interactive Drill-Down:** This tool lets you select a high-risk task and immediately see a breakdown of the factors contributing to its risk score. This focuses conversations and mitigation efforts on the root causes.""")
+            st.markdown("#### The 'How': Logistic Regression + Coefficient Analysis")
+            st.markdown("""1.  A **Logistic Regression** model is trained on historical tasks to learn the relationship between task features and the likelihood of delay.\n2.  The model calculates a risk probability for all 'Not Started' tasks.\n3.  **When you select a task**, we analyze its specific features (e.g., its `duration_days`) and multiply them by the model's learned coefficients (`model.coef_`). This gives us the **Risk Contribution** of each factor.\n4.  A bar chart visualizes these contributions, showing you exactly which factors are driving the risk for the selected task.""")
+
         @st.cache_data
         def train_and_predict_risk(tasks: List[Dict]):
             df = pd.DataFrame(tasks); df['start_date'] = pd.to_datetime(df['start_date']); df['end_date'] = pd.to_datetime(df['end_date'])
             df['duration_days'] = (df['end_date'] - df['start_date']).dt.days; df['num_dependencies'] = df['dependencies'].apply(lambda x: len(x.split(',')) if x else 0)
             critical_path_ids = find_critical_path(df.copy()); df['is_critical'] = df['id'].isin(critical_path_ids).astype(int)
             train_df = df[df['status'].isin(['Completed', 'At Risk'])].copy(); train_df['target'] = (train_df['status'] == 'At Risk').astype(int)
-            if len(train_df['target'].unique()) < 2: return None
+            if len(train_df['target'].unique()) < 2: return None, None, None
             features = ['duration_days', 'num_dependencies', 'is_critical']; X_train = train_df[features]; y_train = train_df['target']
             model = LogisticRegression(random_state=42, class_weight='balanced'); model.fit(X_train, y_train)
             predict_df = df[df['status'] == 'Not Started'].copy()
-            if predict_df.empty: return None
+            if predict_df.empty: return None, None, None
             X_predict = predict_df[features]; predict_df['risk_probability'] = model.predict_proba(X_predict)[:, 1]
-            return predict_df[['name', 'risk_probability']].sort_values('risk_probability', ascending=False)
-        risk_predictions = train_and_predict_risk(ssm.get_data("project_management", "tasks"))
-        if risk_predictions is not None:
-            st.markdown("**Predicted Delay Probability for Future Tasks**")
-            fig = px.bar(risk_predictions, x='risk_probability', y='name', orientation='h', title="Forecasted Risk for 'Not Started' Tasks", labels={'risk_probability': 'Probability of Being "At-Risk"', 'name': 'Task'}, color='risk_probability', color_continuous_scale=px.colors.sequential.Reds)
+            return predict_df, model, features
+
+        risk_predictions_df, risk_model, risk_features = train_and_predict_risk(ssm.get_data("project_management", "tasks"))
+
+        if risk_predictions_df is not None:
+            st.markdown("**Forecasted Delay Probability for Future Tasks**")
+            sorted_risk_df = risk_predictions_df.sort_values('risk_probability', ascending=False)
+            fig = px.bar(sorted_risk_df, x='risk_probability', y='name', orientation='h',
+                         title="Forecasted Risk for 'Not Started' Tasks",
+                         labels={'risk_probability': 'Probability of Being "At-Risk"', 'name': 'Task'},
+                         color='risk_probability', color_continuous_scale=px.colors.sequential.Reds)
             fig.update_layout(height=350, yaxis={'categoryorder':'total ascending'}); st.plotly_chart(fig, use_container_width=True)
-        else: st.info("Not enough historical data (e.g., tasks marked 'At Risk') to train a predictive model yet.")
+            
+            st.divider()
+            st.subheader("Drill-Down: Analyze a Specific Task's Risk Factors")
+            high_risk_tasks = sorted_risk_df[sorted_risk_df['risk_probability'] > 0.5]['name'].tolist()
+            if not high_risk_tasks:
+                st.info("No tasks are currently predicted to be at high risk (>50% probability).")
+            else:
+                selected_task_name = st.selectbox("Select a high-risk task to analyze:", options=high_risk_tasks)
+                
+                task_data = risk_predictions_df[risk_predictions_df['name'] == selected_task_name].iloc[0]
+                task_features = task_data[risk_features]
+                
+                contributions = task_features * risk_model.coef_[0]
+                contribution_df = pd.DataFrame({'feature': risk_features, 'contribution': contributions}).sort_values('contribution', ascending=True)
+                
+                fig_contrib = px.bar(contribution_df, x='contribution', y='feature', orientation='h',
+                                     title=f'Risk Factor Contributions for "{selected_task_name}"',
+                                     labels={'contribution': 'Impact on Risk (Log-Odds)', 'feature': 'Risk Factor'},
+                                     color='contribution',
+                                     color_continuous_scale=px.colors.sequential.RdBu_r,
+                                     text_auto='.2f')
+                fig_contrib.update_layout(showlegend=False, coloraxis_showscale=False)
+                st.plotly_chart(fig_contrib, use_container_width=True)
+                st.caption("Positive values increase the predicted risk of delay, while negative values decrease it.")
+
+        else:
+            st.info("Not enough historical data (e.g., tasks marked 'At Risk') to train a predictive model yet.")
+
 
 def render_compliance_guide_tab():
     """Renders the static educational content for the QE & Compliance Guide tab."""
@@ -778,7 +841,6 @@ def render_compliance_guide_tab():
     try:
         v_model_image_path = os.path.join(project_root, "dhf_dashboard", "v_model_diagram.png")
         if os.path.exists(v_model_image_path):
-            # FIX: Use columns to center and control the image size instead of use_column_width
             _, img_col, _ = st.columns([1, 2, 1])
             img_col.image(v_model_image_path, caption="The V-Model illustrates the relationship between design decomposition and integration/testing.", width=600)
         else:
