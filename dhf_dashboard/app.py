@@ -13,6 +13,7 @@ predictive machine learning content on Quality Engineering and regulatory compli
 import logging
 import os
 import sys
+import copy # Import the copy module for deep copying
 from datetime import timedelta
 from typing import Any, Dict, List
 
@@ -131,7 +132,6 @@ def render_dhf_completeness_panel(ssm: SessionStateManager, tasks_df: pd.DataFra
             st.warning("No project management tasks found.")
             return
 
-        # FIX: The loop of expanders was replaced with subheaders to prevent nesting.
         for task in tasks_raw:
             task_name = task.get('name', 'N/A')
             st.subheader(f"Phase: {task_name}")
@@ -303,7 +303,6 @@ def render_qbd_and_cgmp_panel(ssm: SessionStateManager) -> None:
             qbd_elements = ssm.get_data("quality_by_design", "elements")
             if not qbd_elements: st.warning("No Quality by Design elements have been defined.")
             else:
-                # FIX: Replaced st.expander with st.subheader/markdown to avoid nesting.
                 for element in qbd_elements:
                     st.subheader(f"CQA: {element.get('cqa', 'N/A')}")
                     st.caption(f"(Links to Requirement: {element.get('links_to_req', 'N/A')})")
@@ -325,7 +324,6 @@ def render_qbd_and_cgmp_panel(ssm: SessionStateManager) -> None:
                     total, passed = brr.get('total', 0), brr.get('passed', 0)
                     pass_rate = (passed / total) * 100 if total > 0 else 0
                     st.metric(f"Batch Pass Rate", f"{pass_rate:.1f}%", f"{passed}/{total} Passed")
-                    # FIX: st.progress requires a value between 0.0 and 1.0.
                     st.progress(pass_rate / 100)
                 with col2:
                     st.markdown("**Drug-Device Stability Studies**")
@@ -354,7 +352,6 @@ def render_audit_and_improvement_dashboard(ssm: SessionStateManager) -> None:
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("DHF Document Readiness", f"{doc_readiness:.1f}% Approved")
-                # FIX: st.progress requires a value between 0.0 and 1.0.
                 st.progress(doc_readiness / 100)
             with col2:
                 st.metric("Open CAPA Score", f"{int(capa_score)}/100", help=f"{open_capas} open CAPA(s). Score degrades with each open item.")
@@ -409,6 +406,7 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
         today = pd.to_datetime('today'); overdue_in_progress = tasks_df[(tasks_df['status'] == 'In Progress') & (tasks_df['end_date'] < today)]
         total_in_progress = tasks_df[tasks_df['status'] == 'In Progress']
         schedule_score = (1 - (len(overdue_in_progress) / len(total_in_progress))) * 100 if not total_in_progress.empty else 100
+    
     hazards_df = get_cached_df(ssm.get_data("risk_management_file", "hazards")); risk_score = 0
     if not hazards_df.empty and all(c in hazards_df.columns for c in ['initial_S', 'initial_O', 'initial_D', 'final_S', 'final_O', 'final_D']):
         hazards_df['initial_rpn'] = hazards_df['initial_S'] * hazards_df['initial_O'] * hazards_df['initial_D']
@@ -418,14 +416,14 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
         risk_score = max(0, risk_reduction_pct)
     
     reviews_data = ssm.get_data("design_reviews", "reviews")
+    
     # FIX: Use a deep copy of the action items for the burndown chart to prevent session state mutation.
     action_items_for_burndown = []
-    for review in reviews_data:
+    for review in copy.deepcopy(reviews_data):
         review_date = pd.to_datetime(review.get('date'))
         for item_data in review.get('action_items', []):
-            item_with_date = item_data.copy()
-            item_with_date['review_date'] = review_date
-            action_items_for_burndown.append(item_with_date)
+            item_data['review_date'] = review_date
+            action_items_for_burndown.append(item_data)
             
     original_action_items = [item for r in reviews_data for item in r.get("action_items", [])]
     action_items_df = get_cached_df(original_action_items)
@@ -475,7 +473,6 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
         st.metric(label="Overdue Action Items", value=overdue_actions_count, delta=overdue_actions_count, delta_color="inverse", help="Total number of action items from all design reviews that are past their due date.")
     st.divider()
     st.subheader("Action Item Burn-down (Last 30 Days)")
-    # FIX: Pass the copied and enhanced list to the burndown logic
     burndown_df_source = get_cached_df(action_items_for_burndown)
     if not burndown_df_source.empty:
         df = burndown_df_source.copy()
@@ -485,7 +482,7 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
         completed_items = df[completed_mask].copy()
         if not completed_items.empty:
             lifespan = (completed_items['due_date'] - completed_items['created_date']).dt.days
-            lifespan = lifespan.apply(lambda d: max(1, d))
+            lifespan = lifespan.apply(lambda d: max(1, d if pd.notna(d) else 1))
             completion_days = [np.random.randint(1, d + 1) for d in lifespan]
             completed_items['completion_date'] = completed_items['created_date'] + pd.to_timedelta(completion_days, unit='d')
             df.loc[completed_mask, 'completion_date'] = completed_items['completion_date']
@@ -494,7 +491,7 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
         daily_open_counts = []
         for day in date_range:
             created_on_or_before = df[df['created_date'] <= day]
-            completed_on_or_before = df[df['completion_date'] <= day]
+            completed_on_or_before = df[df['completion_date'].notna() & (df['completion_date'] <= day)]
             net_open = len(created_on_or_before) - len(completed_on_or_before)
             daily_open_counts.append(net_open)
         burndown_df = pd.DataFrame({'date': date_range, 'open_items': daily_open_counts})
@@ -776,8 +773,13 @@ def render_compliance_guide_tab():
     st.markdown("The V-Model is a powerful way to visualize the Design Controls process, emphasizing the critical link between design (left side) and testing (right side).")
     try:
         v_model_image_path = os.path.join(project_root, "dhf_dashboard", "v_model_diagram.png")
-        if os.path.exists(v_model_image_path): st.image(v_model_image_path, caption="The V-Model illustrates the relationship between design decomposition and integration/testing.", use_column_width=True)
-        else: st.error(f"Image Not Found: Ensure `v_model_diagram.png` is in the `dhf_dashboard` directory.", icon="🚨"); logger.warning(f"Could not find v_model_diagram.png at path: {v_model_image_path}")
+        if os.path.exists(v_model_image_path):
+            # FIX: Use columns to center and control the image size instead of use_column_width
+            _, img_col, _ = st.columns([1, 2, 1])
+            img_col.image(v_model_image_path, caption="The V-Model illustrates the relationship between design decomposition and integration/testing.", width=600)
+        else:
+            st.error(f"Image Not Found: Ensure `v_model_diagram.png` is in the `dhf_dashboard` directory.", icon="🚨")
+            logger.warning(f"Could not find v_model_diagram.png at path: {v_model_image_path}")
     except Exception as e: st.error("An error occurred while trying to display the V-Model image."); logger.error(f"Error loading V-Model image: {e}", exc_info=True)
     col1, col2 = st.columns(2)
     with col1: st.subheader("Left Side: Decomposition & Design"); st.markdown("- **User Needs & Intended Use:** What problem does the user need to solve?\n- **Design Inputs (Requirements):** How must the device perform to meet those needs? This includes technical, functional, and safety requirements.\n- **System & Architectural Design:** How will the components be structured to meet the requirements?\n- **Detailed Design (Outputs):** At the lowest level, these are the final drawings, code, and specifications that are used to build the device.")
