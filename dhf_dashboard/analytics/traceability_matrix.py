@@ -62,37 +62,39 @@ def generate_traceability_data(
             left_on='id', right_on='input_verified_id',
             how='left', suffixes=('_req', '_ver')
         )
-        # Mark the link type: Risk Control vs. Standard Requirement
         ver_trace_df['trace_link'] = ver_trace_df.apply(
             lambda row: '✅' if pd.notna(row['id_ver']) and not row['is_risk_control'] else
                         '🔵' if pd.notna(row['id_ver']) and row['is_risk_control'] else '',
             axis=1
         )
     else:
-        # Ensure reqs_df has the necessary columns even if ver_df is empty
         ver_trace_df = reqs_df.copy()
         ver_trace_df['id_ver'] = None
         ver_trace_df['trace_link'] = ''
 
     # --- Validation Trace ---
-    # Merge the result with validation studies
+    # This block is now robust against empty validation data.
     full_trace_df = pd.DataFrame()
-    if not val_df.empty and 'user_need_validated' in val_df.columns:
+    if not val_df.empty and 'user_need_validated' in val_df.columns and 'id' in val_df.columns:
         full_trace_df = pd.merge(
             ver_trace_df, val_df,
             left_on='id_req', right_on='user_need_validated',
             how='left', suffixes=('', '_val')
         )
-        # Add validation links, overwriting only if a validation link exists
-        full_trace_df['trace_link'] = full_trace_df.apply(
-            lambda row: '✅' if pd.notna(row['id_val']) else row['trace_link'],
-            axis=1
-        )
-        # Combine test/study IDs into a single column for pivoting
-        full_trace_df['test_id'] = full_trace_df['id_ver'].fillna(full_trace_df['id_val'])
     else:
+        # FIX: Ensure DataFrame schema is consistent even if val_df is empty.
+        # Create a copy and manually add the columns that the merge would have created.
         full_trace_df = ver_trace_df.copy()
-        full_trace_df['test_id'] = full_trace_df['id_ver']
+        full_trace_df['id_val'] = None # This is the critical missing column.
+
+    # Now, 'id_val' is guaranteed to exist in full_trace_df.
+    # The apply function can safely access it.
+    full_trace_df['trace_link'] = full_trace_df.apply(
+        lambda row: '✅' if pd.notna(row['id_val']) else row['trace_link'],
+        axis=1
+    )
+    # Combine test/study IDs into a single column for pivoting
+    full_trace_df['test_id'] = full_trace_df['id_ver'].fillna(full_trace_df['id_val'])
 
     # --- Pivot to create the matrix ---
     if 'test_id' in full_trace_df.columns and not full_trace_df['test_id'].dropna().empty:
@@ -103,13 +105,14 @@ def generate_traceability_data(
             aggfunc='first'
         ).fillna('')
         matrix_df.index.names = ['Requirement ID', 'Description']
+        logger.info(f"Generated traceability matrix with {len(matrix_df)} rows.")
         return matrix_df
     
     # Fallback for when there are no tests/studies at all
     else:
-
         matrix_df = reqs_df[['id', 'description']].set_index(['id', 'description'])
         matrix_df.index.names = ['Requirement ID', 'Description']
+        logger.info("Generated traceability matrix with requirements but no test columns.")
         return matrix_df
 
 
@@ -138,7 +141,7 @@ def render_traceability_matrix(ssm: SessionStateManager):
         if not styled_matrix_df.empty:
             test_columns = [col for col in styled_matrix_df.columns]
             
-            # FIX: Replaced deprecated `applymap` with `map`
+            # Use .style.map() for modern pandas compatibility.
             st.dataframe(
                 styled_matrix_df.style.map(
                     style_trace_cell,
