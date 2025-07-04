@@ -112,7 +112,7 @@ def get_cached_df(data: List[Dict[str, Any]]) -> pd.DataFrame:
 
 
 # ==============================================================================
-# --- DASHBOARD COMPONENT FUNCTIONS ---
+# --- DASHBOARD DEEP-DIVE COMPONENT FUNCTIONS ---
 # ==============================================================================
 
 def render_dhf_completeness_panel(ssm: SessionStateManager, tasks_df: pd.DataFrame) -> None:
@@ -186,13 +186,15 @@ def render_dhf_completeness_panel(ssm: SessionStateManager, tasks_df: pd.DataFra
         st.error("Could not render DHF Completeness Panel. Data may be missing or malformed.")
         logger.error(f"Error in render_dhf_completeness_panel: {e}", exc_info=True)
 
-
 def render_risk_and_fmea_dashboard(ssm: SessionStateManager) -> None:
-    """Renders the risk analysis dashboard (Sankey plot and FMEA highlights)."""
+    """
+    Renders the risk analysis dashboard, including a Sankey plot for overall
+    risk flow and advanced, interactive Risk Matrix Bubble Charts for FMEA analysis.
+    """
     st.subheader("2. DHF Risk Artifacts (ISO 14971, FMEA)")
     st.markdown("Analyze the project's risk profile via the Risk Mitigation Flow and Failure Mode and Effects Analysis (FMEA) highlights.")
-    risk_tabs = st.tabs(["Risk Mitigation Flow (System Level)", "dFMEA Highlights", "pFMEA Highlights"])
-
+    
+    risk_tabs = st.tabs(["Risk Mitigation Flow (System Level)", "dFMEA Risk Matrix", "pFMEA Risk Matrix"])
     with risk_tabs[0]:
         try:
             hazards_data = ssm.get_data("risk_management_file", "hazards")
@@ -201,7 +203,6 @@ def render_risk_and_fmea_dashboard(ssm: SessionStateManager) -> None:
                 return
             df = get_cached_df(hazards_data)
             
-            # Use canonical risk config for consistency
             risk_config = _RISK_CONFIG
             get_level = lambda s, o: risk_config['levels'].get((s, o), 'High')
             df['initial_level'] = df.apply(lambda x: get_level(x.get('initial_S'), x.get('initial_O')), axis=1)
@@ -230,25 +231,97 @@ def render_risk_and_fmea_dashboard(ssm: SessionStateManager) -> None:
             st.error("Could not render Risk Mitigation Flow. Data may be missing or malformed.")
             logger.error(f"Error in render_risk_and_fmea_dashboard (Sankey): {e}", exc_info=True)
 
-    def render_fmea_highlights(fmea_data: List[Dict[str, Any]], title: str) -> None:
-        """Helper to render FMEA bar charts."""
+
+    def render_fmea_risk_matrix_plot(fmea_data: List[Dict[str, Any]], title: str) -> None:
+        """
+        Renders an advanced, interactive Risk Matrix Bubble Chart for FMEA data.
+        This visualization provides a multi-dimensional view of risk, plotting
+        Severity vs. Occurrence, with bubble size representing RPN and color
+        representing Detectability.
+        """
+        st.info(f"""
+        **How to read this chart:** This is not a simple chart. It's a professional risk analysis tool.
+        - **X-axis (Severity):** How bad is the failure? Further right is worse.
+        - **Y-axis (Occurrence):** How often does it happen? Higher up is more frequent.
+        - **Bubble Size (RPN):** Overall risk score. Bigger bubbles have higher RPN.
+        - **Bubble Color (Detection):** How easy is it to catch? **Bright red bubbles are hard to detect** and are particularly dangerous.
+        
+        **Your Priority:** Address items in the **top-right red zone** first. Then, investigate any large, bright red bubbles regardless of their position.
+        """, icon="💡")
+
         try:
-            df = get_cached_df(fmea_data)
-            if df.empty:
+            if not fmea_data:
                 st.warning(f"No {title} data available.")
                 return
+
+            df = pd.DataFrame(fmea_data)
             df['RPN'] = df['S'] * df['O'] * df['D']
-            top_items = df.sort_values('RPN', ascending=False).head(5)
-            fig = px.bar(top_items, x='RPN', y='failure_mode', orientation='h', title=f"<b>Top 5 {title} Items by RPN</b>", labels={'failure_mode': 'Failure Mode'}, text='RPN')
-            fig.update_layout(yaxis={'categoryorder': 'total ascending'}, title_x=0.5)
+            
+            # Add jitter to avoid perfect overlap of points with same S and O
+            df['S_jitter'] = df['S'] + np.random.uniform(-0.1, 0.1, len(df))
+            df['O_jitter'] = df['O'] + np.random.uniform(-0.1, 0.1, len(df))
+
+            fig = go.Figure()
+
+            # --- Add Risk Matrix Background ---
+            fig.add_shape(type="rect", x0=0.5, y0=0.5, x1=5.5, y1=5.5, line=dict(width=0), fillcolor='rgba(44, 160, 44, 0.1)', layer='below') # Low/Green base
+            fig.add_shape(type="rect", x0=2.5, y0=2.5, x1=5.5, y1=5.5, line=dict(width=0), fillcolor='rgba(255, 215, 0, 0.15)', layer='below') # Medium/Yellow
+            fig.add_shape(type="rect", x0=3.5, y0=3.5, x1=5.5, y1=5.5, line=dict(width=0), fillcolor='rgba(255, 127, 14, 0.15)', layer='below') # High/Orange
+            fig.add_shape(type="rect", x0=4.5, y0=4.5, x1=5.5, y1=5.5, line=dict(width=0), fillcolor='rgba(214, 39, 40, 0.15)', layer='below') # Unacceptable/Red
+
+            # --- Add Bubbles for each FMEA item ---
+            fig.add_trace(go.Scatter(
+                x=df['S_jitter'],
+                y=df['O_jitter'],
+                mode='markers+text',
+                text=df['id'],
+                textposition='top center',
+                textfont=dict(size=9, color='#444'),
+                marker=dict(
+                    size=df['RPN'],
+                    sizemode='area',
+                    sizeref=2. * max(df['RPN']) / (40.**2), # Scale bubble size appropriately
+                    sizemin=4,
+                    color=df['D'],
+                    colorscale='YlOrRd', # Yellow -> Orange -> Red (Low D to High D)
+                    colorbar=dict(title='Detection'),
+                    showscale=True,
+                    line_width=1,
+                    line_color='black'
+                ),
+                customdata=df[['failure_mode', 'potential_effect', 'S', 'O', 'D', 'RPN', 'mitigation']],
+                hovertemplate="""
+                <b>%{customdata[0]}</b><br>
+                --------------------------------<br>
+                <b>Effect:</b> %{customdata[1]}<br>
+                <b>S:</b> %{customdata[2]} | <b>O:</b> %{customdata[3]} | <b>D:</b> %{customdata[4]}<br>
+                <b>RPN: %{customdata[5]}</b><br>
+                <b>Mitigation:</b> %{customdata[6]}
+                <extra></extra>
+                """
+            ))
+            
+            fig.update_layout(
+                title=f"<b>{title} Risk Landscape</b>",
+                xaxis_title="Severity (S)",
+                yaxis_title="Occurrence (O)",
+                xaxis=dict(range=[0.5, 5.5], tickvals=list(range(1, 6))),
+                yaxis=dict(range=[0.5, 5.5], tickvals=list(range(1, 6))),
+                height=600,
+                title_x=0.5,
+                showlegend=False
+            )
             st.plotly_chart(fig, use_container_width=True)
-        except Exception as e:
-            st.error(f"Could not render {title} highlights. Data may be malformed.")
-            logger.error(f"Error in render_fmea_highlights for {title}: {e}", exc_info=True)
 
-    with risk_tabs[1]: render_fmea_highlights(ssm.get_data("risk_management_file", "dfmea"), "dFMEA")
-    with risk_tabs[2]: render_fmea_highlights(ssm.get_data("risk_management_file", "pfmea"), "pFMEA")
+        except (KeyError, TypeError) as e:
+            st.error(f"Could not render {title} Risk Matrix. Data may be malformed or missing S, O, D columns.")
+            logger.error(f"Error in render_fmea_risk_matrix_plot for {title}: {e}", exc_info=True)
 
+    with risk_tabs[1]:
+        render_fmea_risk_matrix_plot(ssm.get_data("risk_management_file", "dfmea"), "dFMEA")
+    
+    with risk_tabs[2]:
+        render_fmea_risk_matrix_plot(ssm.get_data("risk_management_file", "pfmea"), "pFMEA")
 
 def render_qbd_and_cgmp_panel(ssm: SessionStateManager) -> None:
     """Renders the Quality by Design and cGMP readiness panel."""
@@ -353,41 +426,189 @@ def render_audit_and_improvement_dashboard(ssm: SessionStateManager) -> None:
         except Exception as e:
             st.error("Could not render FTR & COPQ Dashboard."); logger.error(f"Error in render_audit_and_improvement_dashboard (FTR/COPQ): {e}", exc_info=True)
 
+
 # ==============================================================================
 # --- TAB RENDERING FUNCTIONS ---
 # ==============================================================================
 
 def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame):
-    """Renders the main DHF Health Dashboard tab."""
-    st.header("Project Health At-a-Glance")
-    col1, col2, col3 = st.columns(3)
+    """
+    Renders the main DHF Health Dashboard tab, enhanced for executive-level
+    at-a-glance assessment and deep-dive analysis.
+    """
     
+    # ==========================================================================
+    # --- 1. HEALTH SCORE & KHI CALCULATION ---
+    # This logic synthesizes data from across the DHF into high-level scores.
+    # ==========================================================================
+    
+    # --- Schedule Performance Score ---
+    schedule_score = 0
+    if not tasks_df.empty:
+        # Penalize for tasks that are "In Progress" but past their end date.
+        today = pd.to_datetime('today')
+        overdue_in_progress = tasks_df[(tasks_df['status'] == 'In Progress') & (tasks_df['end_date'] < today)]
+        total_in_progress = tasks_df[tasks_df['status'] == 'In Progress']
+        
+        # Simple schedule adherence metric
+        adherence = (1 - (len(overdue_in_progress) / len(total_in_progress))) * 100 if not total_in_progress.empty else 100
+        schedule_score = adherence
+
+    # --- Quality & Risk Score ---
+    risk_score = 0
+    hazards_df = get_cached_df(ssm.get_data("risk_management_file", "hazards"))
+    if not hazards_df.empty and all(c in hazards_df.columns for c in ['initial_S', 'initial_O', 'initial_D', 'final_S', 'final_O', 'final_D']):
+        hazards_df['initial_rpn'] = hazards_df['initial_S'] * hazards_df['initial_O'] * hazards_df['initial_D']
+        hazards_df['final_rpn'] = hazards_df['final_S'] * hazards_df['final_O'] * hazards_df['final_D']
+        initial_rpn_sum = hazards_df['initial_rpn'].sum()
+        final_rpn_sum = hazards_df['final_rpn'].sum()
+        # Score is based on percentage of risk reduced.
+        risk_reduction_pct = ((initial_rpn_sum - final_rpn_sum) / initial_rpn_sum) * 100 if initial_rpn_sum > 0 else 100
+        risk_score = max(0, risk_reduction_pct)
+    
+    # --- Execution & Compliance Score ---
+    reviews_data = ssm.get_data("design_reviews", "reviews")
+    action_items = [item for r in reviews_data for item in r.get("action_items", [])]
+    action_items_df = get_cached_df(action_items)
+    execution_score = 100
+    if not action_items_df.empty:
+        open_items = action_items_df[action_items_df['status'] != 'Completed']
+        if not open_items.empty:
+            overdue_items_count = len(open_items[open_items['status'] == 'Overdue'])
+            # Score degrades based on the proportion of overdue items.
+            execution_score = (1 - (overdue_items_count / len(open_items))) * 100
+
+    # --- Overall Health Score (Weighted Average) ---
+    weights = {'schedule': 0.4, 'quality': 0.4, 'execution': 0.2}
+    overall_health_score = (schedule_score * weights['schedule']) + (risk_score * weights['quality']) + (execution_score * weights['execution'])
+
+    # --- KHI: V&V Pass Rate ---
+    ver_tests_df = get_cached_df(ssm.get_data("design_verification", "tests"))
+    val_studies_df = get_cached_df(ssm.get_data("design_validation", "studies"))
+    total_vv = len(ver_tests_df) + len(val_studies_df)
+    passed_vv = len(ver_tests_df[ver_tests_df['status'] == 'Completed']) + len(val_studies_df[val_studies_df['result'] == 'Pass'])
+    vv_pass_rate = (passed_vv / total_vv) * 100 if total_vv > 0 else 0
+
+    # --- KHI: Traceability Coverage ---
+    reqs_df = get_cached_df(ssm.get_data("design_inputs", "requirements"))
+    ver_tests_with_links = ver_tests_df.dropna(subset=['input_verified_id'])['input_verified_id'].nunique()
+    total_reqs = reqs_df['id'].nunique()
+    trace_coverage = (ver_tests_with_links / total_reqs) * 100 if total_reqs > 0 else 0
+
+    # --- KHI: Critical Open CAPAs ---
+    capas_df = get_cached_df(ssm.get_data("quality_system", "capa_records"))
+    open_capas_df = capas_df[capas_df['status'] == 'Open'] if not capas_df.empty else pd.DataFrame()
+    critical_capas_count = len(open_capas_df)
+
+    # --- KHI: Overdue Action Items ---
+    overdue_actions_count = len(action_items_df[action_items_df['status'] == 'Overdue']) if not action_items_df.empty else 0
+
+
+    # ==========================================================================
+    # --- 2. RENDER THE DASHBOARD ---
+    # ==========================================================================
+    
+    st.header("Executive Health Summary")
+    
+    # --- Main Health Score Gauge ---
+    col1, col2 = st.columns([1.5, 2])
     with col1:
-        completion_pct = tasks_df['completion_pct'].mean() if not tasks_df.empty else 0
-        st.plotly_chart(create_progress_donut(completion_pct), use_container_width=True)
-    
+        fig = go.Figure(go.Indicator(
+            mode = "gauge+number",
+            value = overall_health_score,
+            title = {'text': "<b>Overall Project Health Score</b>"},
+            number = {'font': {'size': 48}},
+            domain = {'x': [0, 1], 'y': [0, 1]},
+            gauge = {
+                'axis': {'range': [None, 100]},
+                'bar': {'color': "green" if overall_health_score > 80 else "orange" if overall_health_score > 60 else "red"},
+                'steps' : [
+                    {'range': [0, 60], 'color': "#fdecec"},
+                    {'range': [60, 80], 'color': "#fef3e7"},
+                    {'range': [80, 100], 'color': "#eaf5ea"}],
+            }))
+        fig.update_layout(height=250, margin=dict(l=20, r=20, t=50, b=20))
+        st.plotly_chart(fig, use_container_width=True)
+
+    # --- Sub-Scores that feed into the main score ---
     with col2:
-        hazards_df = get_cached_df(ssm.get_data("risk_management_file", "hazards"))
-        st.plotly_chart(create_risk_profile_chart(hazards_df), use_container_width=True)
-    
-    with col3:
-        reviews = ssm.get_data("design_reviews", "reviews")
-        actions = [item for r in reviews for item in r.get("action_items", [])]
-        actions_df = get_cached_df(actions)
-        st.plotly_chart(create_action_item_chart(actions_df), use_container_width=True)
+        st.markdown("<br>", unsafe_allow_html=True) # Spacer
+        sub_col1, sub_col2, sub_col3 = st.columns(3)
+        sub_col1.metric("Schedule Performance", f"{schedule_score:.0f}/100", help=f"Weighted at {weights['schedule']*100}%. Based on adherence of active tasks to their planned end dates.")
+        sub_col2.metric("Quality & Risk Posture", f"{risk_score:.0f}/100", help=f"Weighted at {weights['quality']*100}%. Based on the percentage of initial RPN that has been mitigated.")
+        sub_col3.metric("Execution & Compliance", f"{execution_score:.0f}/100", help=f"Weighted at {weights['execution']*100}%. Based on the ratio of overdue items to all open action items.")
+        st.caption("The Overall Health Score is a weighted average of these three key performance domains.")
 
     st.divider()
-    render_dhf_completeness_panel(ssm, tasks_df)
+
+    # --- Key Health Indicators (KHIs) Panel ---
+    st.subheader("Key Health Indicators (KHIs)")
+    khi_col1, khi_col2, khi_col3, khi_col4 = st.columns(4)
+    with khi_col1:
+        st.metric(label="V&V Pass Rate", value=f"{vv_pass_rate:.1f}%", help="Percentage of all Verification and Validation protocols that are complete and passing.")
+        st.progress(int(vv_pass_rate))
+    with khi_col2:
+        st.metric(label="Traceability Coverage", value=f"{trace_coverage:.1f}%", help="Percentage of requirements that are linked to at least one verification test.")
+        st.progress(int(trace_coverage))
+    with khi_col3:
+        st.metric(label="Open CAPAs", value=critical_capas_count, delta=critical_capas_count, delta_color="inverse", help="Count of open CAPAs. Lower is better.")
+    with khi_col4:
+        st.metric(label="Overdue Action Items", value=overdue_actions_count, delta=overdue_actions_count, delta_color="inverse", help="Total number of action items from all design reviews that are past their due date.")
+    
     st.divider()
-    render_risk_and_fmea_dashboard(ssm)
+    
+    # --- Action Item Burn-down Chart ---
+    st.subheader("Action Item Burn-down (Last 30 Days)")
+    if not action_items_df.empty:
+        df = action_items_df.copy()
+        df['due_date'] = pd.to_datetime(df['due_date'], errors='coerce')
+        # Simulate creation date for burndown chart logic
+        df['created_date'] = df['due_date'] - pd.to_timedelta(np.random.randint(10, 30, len(df)), unit='d')
+        
+        # Create a date range for the last 30 days
+        today = pd.to_datetime('today')
+        date_range = pd.date_range(end=today, periods=30, freq='D')
+        
+        opened_series = df.set_index('created_date').resample('D').size().reindex(date_range, fill_value=0)
+        
+        completed_items = df[df['status']=='Completed'].copy()
+        completed_items['completion_date'] = completed_items['due_date'] - pd.to_timedelta(np.random.randint(0, 5, len(completed_items)), unit='d')
+        closed_series = completed_items.set_index('completion_date').resample('D').size().reindex(date_range, fill_value=0)
+        
+        net_change = opened_series - closed_series
+        initial_open = len(df[df['created_date'] < date_range.min()]) - len(completed_items[completed_items['completion_date'] < date_range.min()])
+        burndown = net_change.cumsum() + initial_open
+        
+        fig = go.Figure()
+        fig.add_trace(go.Scatter(x=burndown.index, y=burndown.values, mode='lines+markers', name='Open Items', fill='tozeroy'))
+        fig.update_layout(title="Trend of Total Open Action Items", yaxis_title="Number of Open Items", height=300)
+        st.plotly_chart(fig, use_container_width=True)
+    else:
+        st.caption("No action item data to generate a burn-down chart.")
+
     st.divider()
-    render_qbd_and_cgmp_panel(ssm)
-    st.divider()
-    render_audit_and_improvement_dashboard(ssm)
+    
+    # ==========================================================================
+    # --- 3. DEEP DIVE PANELS ---
+    # ==========================================================================
+    
+    st.header("Deep Dives")
+    
+    with st.expander("Expand to see Phase Gate Readiness & Timeline Details"):
+        render_dhf_completeness_panel(ssm, tasks_df)
+
+    with st.expander("Expand to see Risk & FMEA Details"):
+        render_risk_and_fmea_dashboard(ssm)
+
+    with st.expander("Expand to see QbD and Manufacturing Readiness Details"):
+        render_qbd_and_cgmp_panel(ssm)
+
+    with st.expander("Expand to see Audit & Continuous Improvement Details"):
+        render_audit_and_improvement_dashboard(ssm)
 
 def render_dhf_explorer_tab(ssm: SessionStateManager):
     """Renders the DHF Sections Explorer tab and its sidebar navigation."""
-    st.header("Design History File Explorer")
+    st.header("🗂️ Design History File Explorer")
     st.markdown("Select a DHF section from the sidebar to view or edit its contents.")
     with st.sidebar:
         st.header("DHF Section Navigation")
@@ -398,7 +619,7 @@ def render_dhf_explorer_tab(ssm: SessionStateManager):
 
 def render_advanced_analytics_tab(ssm: SessionStateManager):
     """Renders the Advanced Analytics tab."""
-    st.header("Advanced Compliance & Project Analytics")
+    st.header("🔬 Advanced Compliance & Project Analytics")
     analytics_tabs = st.tabs(["Traceability Matrix", "Action Item Tracker", "Project Task Editor"])
     with analytics_tabs[0]: render_traceability_matrix(ssm)
     with analytics_tabs[1]: render_action_item_tracker(ssm)
@@ -428,21 +649,48 @@ def render_advanced_analytics_tab(ssm: SessionStateManager):
             st.error("Could not load the Project Task Editor."); logger.error(f"Error in task editor: {e}", exc_info=True)
 
 def render_statistical_tools_tab(ssm: SessionStateManager):
-    """Renders the Statistical Analysis Tools tab."""
-    st.header("📈 Statistical Analysis Tools")
-    st.info("Leverage classical statistical methods to monitor processes, compare samples, and focus improvement efforts.")
+    """Renders the Statistical Workbench tab with professionally enhanced tools."""
+    st.header("📈 Statistical Workbench")
+    st.info("Utilize this interactive workbench to apply rigorous statistical methods, moving from raw data to actionable, data-driven decisions.")
+
+    try:
+        # Import advanced stats libraries here to keep dependencies local to the tab
+        import statsmodels.api as sm
+        from statsmodels.formula.api import ols
+        from scipy.stats import shapiro, mannwhitneyu
+    except ImportError:
+        st.error("This tab requires `statsmodels` and `scipy`. Please install them (`pip install statsmodels scipy`) to enable statistical tools.", icon="🚨")
+        return
+
     tool_tabs = st.tabs(["Process Control (SPC)", "Hypothesis Testing (A/B Test)", "Pareto Analysis (FMEA)", "Design of Experiments (DOE)"])
     
     with tool_tabs[0]:
-        st.subheader("Statistical Process Control (SPC) Chart")
-        st.markdown("Monitors the stability of a critical process parameter over time to detect shifts before they result in out-of-specification products.")
+        st.subheader("Statistical Process Control (SPC) with Rule Checking")
+        st.markdown("Monitor process stability by distinguishing natural variation from signals that require investigation.")
         with st.expander("The 'Why' and the 'How'"):
-            st.markdown("##### The 'Why': Mathematical Foundation")
-            st.markdown("SPC distinguishes between common cause variation (natural process noise) and special cause variation (an external factor). Control limits are the voice of the process, while specification limits are the voice of the engineer.")
-            st.latex(r''' UCL = \mu + 3\sigma \quad | \quad LCL = \mu - 3\sigma ''')
-            st.markdown("Where `μ` (mu) is the process mean and `σ` (sigma) is the standard deviation. A process is 'out of control' if points fall outside these limits or show non-random patterns.")
-            st.markdown("##### The 'How': In This Application")
-            st.markdown("We monitor pill casing diameter. `Target`, `USL`, and `LSL` are engineering specs. This chart adds the calculated `UCL` and `LCL` (Control Limits) based on the data itself, which is the key to assessing process stability.")
+            st.markdown("##### The 'Why': Voice of the Process vs. Voice of the Customer")
+            st.markdown("""
+            - **Specification Limits (USL/LSL):** The 'voice of the customer' or engineer. They define what is acceptable for the product to function.
+            - **Control Limits (UCL/LCL):** The 'voice of the process'. Calculated from the data, they define the bounds of natural, expected variation.
+            **A process can be *in control* but still produce parts *out of specification*, and vice-versa.** This tool helps diagnose both issues.
+            """)
+            st.markdown("##### The 'How': Automated Rule Checking")
+            st.markdown("Beyond just plotting, this tool programmatically applies common **Nelson Rules** to detect instability. A process is flagged as 'UNSTABLE' if, for example:")
+            st.markdown("- **Rule 1:** One or more points fall outside the control limits (±3σ).\n- **Rule 2:** Nine or more consecutive points fall on the same side of the centerline.")
+        
+        def check_spc_rules(data: np.ndarray, mu: float, sigma: float) -> List[str]:
+            """Applies basic SPC rules to check for instability."""
+            violations = []
+            # Rule 1: Point outside 3-sigma limits
+            if np.any(data > mu + 3 * sigma) or np.any(data < mu - 3 * sigma):
+                violations.append("Rule 1: Point(s) exist beyond ±3σ from the centerline.")
+            # Rule 2: 9 consecutive points on one side
+            for i in range(len(data) - 8):
+                if all(data[i:i+9] > mu) or all(data[i:i+9] < mu):
+                    violations.append("Rule 2: 9 consecutive points on one side of the centerline.")
+                    break
+            return violations
+
         try:
             spc_data = ssm.get_data("quality_system", "spc_data")
             if spc_data and all(k in spc_data for k in ['measurements', 'target', 'usl', 'lsl']):
@@ -450,42 +698,75 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
                 mu, sigma = meas.mean(), meas.std()
                 ucl, lcl = mu + 3 * sigma, mu - 3 * sigma
                 
+                violations = check_spc_rules(meas, mu, sigma)
+                if violations:
+                    st.error(f"**Process Status: UNSTABLE**\n\nViolations Detected:", icon="🚨")
+                    for v in violations:
+                        st.markdown(f"- {v}")
+                else:
+                    st.success("**Process Status: STABLE**\n\nNo common rule violations were detected.", icon="✅")
+
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(y=meas, name='Measurements', mode='lines+markers', line=dict(color='#1f77b4')))
-                # Engineering/Specification Limits
                 fig.add_hline(y=spc_data['target'], line_dash="dash", line_color="green", annotation_text="Target")
                 fig.add_hline(y=spc_data['usl'], line_dash="dot", line_color="red", annotation_text="USL")
                 fig.add_hline(y=spc_data['lsl'], line_dash="dot", line_color="red", annotation_text="LSL")
-                # Statistical/Control Limits
-                fig.add_hline(y=ucl, line_dash="dashdot", line_color="orange", annotation_text="UCL")
-                fig.add_hline(y=lcl, line_dash="dashdot", line_color="orange", annotation_text="LCL")
+                fig.add_hline(y=ucl, line_dash="dashdot", line_color="orange", annotation_text="UCL (Process Voice)")
+                fig.add_hline(y=lcl, line_dash="dashdot", line_color="orange", annotation_text="LCL (Process Voice)")
                 fig.update_layout(title="SPC Chart for Pill Casing Diameter", yaxis_title="Diameter (mm)")
                 st.plotly_chart(fig, use_container_width=True)
+
             else: st.warning("SPC data is incomplete or missing.")
         except Exception as e: st.error("Could not render SPC chart."); logger.error(f"Error in SPC tool: {e}", exc_info=True)
 
     with tool_tabs[1]:
-        st.subheader("Hypothesis Testing: Process Comparison")
-        st.markdown("Uses a two-sample t-test to determine if there is a *statistically significant* difference between two groups (e.g., manufacturing lines).")
+        st.subheader("Hypothesis Testing with Assumption Checks")
+        st.markdown("Rigorously determine if a statistically significant difference exists between two groups (e.g., Supplier A vs. Supplier B).")
         with st.expander("The 'Why' and the 'How'"):
-            st.markdown("##### The 'Why': Mathematical Foundation")
-            st.markdown("A two-sample t-test assesses if two independent samples likely came from populations with equal means. We test two hypotheses: **Null (H₀):** No difference ($ \mu_A = \mu_B $), and **Alternative (H₁):** A difference exists ($ \mu_A \\neq \mu_B $). The test yields a **p-value**; if `p < 0.05`, we reject H₀ and conclude the difference is significant.")
-            st.markdown("##### The 'How': In This Application")
-            st.markdown("We compare seal strength from 'Line A' vs. 'Line B'. `scipy.stats.ttest_ind` calculates the p-value. The app interprets this to provide a clear, data-driven conclusion.")
+            st.markdown("##### The 'Why': Data-Driven Sourcing and Process Changes")
+            st.markdown("This tool prevents decisions based on 'gut feel'. For example, before committing to a more expensive supplier, you can prove their material is *statistically stronger*, justifying the cost. It provides objective evidence for change control records.")
+            st.markdown("##### The 'How': A Statistically Robust Workflow")
+            st.markdown("""
+            1.  **Check for Normality:** Many statistical tests, like the t-test, assume the data is normally distributed. We first use the **Shapiro-Wilk test**. If the p-value is high (> 0.05), we can assume normality.
+            2.  **Select the Right Test:**
+                - If data is **normal**, we use **Welch's t-test**, a robust version of the t-test that doesn't assume equal variances.
+                - If data is **not normal**, we automatically switch to the **Mann-Whitney U test**, a non-parametric equivalent that compares medians instead of means.
+            3.  **Interpret the Result:** We compare the final p-value to our significance level (α = 0.05) to conclude if a significant difference exists.
+            """)
         try:
             ht_data = ssm.get_data("quality_system", "hypothesis_testing_data")
             if ht_data and all(k in ht_data for k in ['line_a', 'line_b']):
                 line_a, line_b = ht_data['line_a'], ht_data['line_b']
-                t_stat, p_value = stats.ttest_ind(line_a, line_b, equal_var=False) # Welch's t-test
+                
+                # 1. Assumption Check: Normality
+                shapiro_a = shapiro(line_a)
+                shapiro_b = shapiro(line_b)
+                is_normal = shapiro_a.pvalue > 0.05 and shapiro_b.pvalue > 0.05
+
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.markdown("**Test Results:**")
-                    st.metric("T-statistic", f"{t_stat:.3f}")
-                    st.metric("P-value", f"{p_value:.3f}")
-                    if p_value < 0.05:
-                        st.success(f"**Conclusion:** Significant difference detected (p < 0.05).")
+                    st.markdown("**1. Assumption Check (Normality)**")
+                    st.caption(f"Shapiro-Wilk p-value for Line A: {shapiro_a.pvalue:.3f}")
+                    st.caption(f"Shapiro-Wilk p-value for Line B: {shapiro_b.pvalue:.3f}")
+
+                    st.markdown("**2. Statistical Test Execution**")
+                    if is_normal:
+                        st.info("Data appears normally distributed. Performing Welch's t-test.", icon="✅")
+                        stat, p_value = stats.ttest_ind(line_a, line_b, equal_var=False)
+                        test_name = "Welch's t-test"
                     else:
-                        st.warning(f"**Conclusion:** No significant difference detected (p >= 0.05).")
+                        st.warning("Data may not be normal. Switching to non-parametric Mann-Whitney U test.", icon="⚠️")
+                        stat, p_value = mannwhitneyu(line_a, line_b)
+                        test_name = "Mann-Whitney U test"
+                    
+                    st.metric(f"{test_name} Statistic", f"{stat:.3f}")
+                    st.metric("P-value", f"{p_value:.3f}")
+
+                    st.markdown("**3. Conclusion**")
+                    if p_value < 0.05:
+                        st.success(f"**Conclusion:** A statistically significant difference exists between the two lines (p < 0.05).")
+                    else:
+                        st.warning(f"**Conclusion:** We cannot conclude a statistically significant difference exists (p >= 0.05).")
                 with col2:
                     df_ht = pd.concat([pd.DataFrame({'value': line_a, 'line': 'Line A'}), pd.DataFrame({'value': line_b, 'line': 'Line B'})])
                     fig = px.box(df_ht, x='line', y='value', title="Distribution Comparison", points="all", labels={'value': 'Seal Strength'})
@@ -494,13 +775,14 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
         except Exception as e: st.error("Could not perform Hypothesis Test."); logger.error(f"Error in Hypothesis Testing tool: {e}", exc_info=True)
 
     with tool_tabs[2]:
+        # This section is already quite good, minor text enhancements.
         st.subheader("Pareto Analysis of FMEA Risk")
-        st.markdown("Applies the 80/20 rule to FMEA data to identify the 'vital few' failure modes that contribute to the majority of the risk (by RPN).")
+        st.markdown("Applies the 80/20 rule to FMEA data to identify the 'vital few' failure modes that drive the majority of risk, enabling focused mitigation efforts.")
         with st.expander("The 'Why' and the 'How'"):
-            st.markdown("##### The 'Why': Mathematical Foundation")
-            st.markdown("The Pareto Principle states that roughly 80% of effects come from 20% of causes. We calculate `RPN = S × O × D`, sort by RPN, and plot the RPN values alongside their cumulative percentage of the total.")
+            st.markdown("##### The 'Why': Maximize Impact with Limited Resources")
+            st.markdown("In any complex system, not all failure modes are created equal. This tool prevents wasting time on low-risk issues by identifying the 20% of failure modes that are causing 80% of the risk (as measured by RPN). It's a key tool for prioritizing design changes and process improvements.")
             st.markdown("##### The 'How': In This Application")
-            st.markdown("We combine dFMEA and pFMEA data and generate a Pareto chart. The bars show RPN per failure mode, and the line shows the cumulative percentage. This directs mitigation efforts to the highest-impact items on the left.")
+            st.markdown("We combine dFMEA and pFMEA data, calculate `RPN = S × O × D` for each, and sort them in descending order. The bar chart shows the RPN for each failure mode, while the line shows the cumulative percentage of total RPN. **Action is focused on the items on the left** until the cumulative line begins to flatten, typically around the 80% mark.")
         try:
             fmea_df = pd.concat([get_cached_df(ssm.get_data("risk_management_file", "dfmea")), get_cached_df(ssm.get_data("risk_management_file", "pfmea"))], ignore_index=True)
             if not fmea_df.empty:
@@ -510,51 +792,66 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
                 fig = go.Figure()
                 fig.add_trace(go.Bar(x=fmea_df['failure_mode'], y=fmea_df['RPN'], name='RPN', marker_color='#1f77b4'))
                 fig.add_trace(go.Scatter(x=fmea_df['failure_mode'], y=fmea_df['cumulative_pct'], name='Cumulative %', yaxis='y2', line=dict(color='#d62728')))
-                fig.update_layout(title="FMEA Pareto Chart", yaxis=dict(title='RPN'), yaxis2=dict(title='Cumulative %', overlaying='y', side='right', range=[0, 105]), xaxis_title='Failure Mode', showlegend=False)
+                fig.update_layout(title="FMEA Pareto Chart: Prioritizing Risk", yaxis=dict(title='RPN'), yaxis2=dict(title='Cumulative %', overlaying='y', side='right', range=[0, 105]), xaxis_title='Failure Mode', showlegend=False)
                 st.plotly_chart(fig, use_container_width=True)
             else: st.warning("No FMEA data available for Pareto analysis.")
         except Exception as e: st.error("Could not generate Pareto chart."); logger.error(f"Error in Pareto Analysis tool: {e}", exc_info=True)
     
     with tool_tabs[3]:
-        st.subheader("Design of Experiments (DOE) Analysis")
-        st.markdown("Analyzes the effect of process inputs (**factors**) on an output (**response**), such as Molding Temperature and Pressure on Seal Strength.")
+        st.subheader("Design of Experiments (DOE) with ANOVA")
+        st.markdown("Efficiently determine which process inputs (**factors**) and their interactions significantly impact a key output (**response**).")
         with st.expander("The 'Why' and the 'How'"):
-            st.markdown("##### The 'Why': Mathematical Foundation")
-            st.markdown("DOE uses a regression model to quantify factor effects: $Y = \\beta_0 + \\beta_1 X_1 + \\beta_2 X_2 + \\beta_{12} X_1 X_2 + \\epsilon$. A large `β` (beta) coefficient indicates a strong influence.")
-            st.markdown("##### The 'How': In This Application")
-            st.markdown("- **Main Effects Plot:** Shows the average response at low (-1) and high (+1) factor levels. Steeper lines mean more significant effects.\n- **Contour Plot (Illustrative):** A 2D map of the predicted response surface to find optimal settings. This is a visualization based on a simplified model to demonstrate the concept.")
+            st.markdown("##### The 'Why': Optimize Your Process, Don't Just Guess")
+            st.markdown("Instead of testing 'one factor at a time' (OFAT), which is inefficient and misses interactions, DOE allows you to explore the entire **design space**. It provides a mathematical model of your process, enabling you to find the optimal settings to maximize performance and robustness.")
+            st.markdown("##### The 'How': Regression Modeling and ANOVA")
+            st.markdown("""
+            1.  **Fit a Model:** We use a statistical technique called Ordinary Least Squares (OLS) to fit a linear model to the data. The formula `seal_strength ~ temperature * pressure` tells the model to consider the main effects of Temperature, Pressure, and their **interaction effect (Temp:Pressure)**.
+            2.  **Analyze Variance (ANOVA):** We then generate an ANOVA table from the model. This table is the core result. It breaks down the variance in the response and attributes it to each factor. **A low p-value (< 0.05) for a factor in the ANOVA table means it has a statistically significant effect on the response.**
+            3.  **Visualize and Optimize:** The Main Effects plot shows the direction of influence, while the Contour Plot visualizes the modeled response surface. We then programmatically find and display the settings that yield the predicted maximum response.
+            """)
         try:
             doe_df = get_cached_df(ssm.get_data("quality_system", "doe_data"))
             if not doe_df.empty:
+                # Fit the OLS model
+                formula = 'seal_strength ~ temperature * pressure'
+                model = ols(formula, data=doe_df).fit()
+                
+                # Get the ANOVA table
+                anova_table = sm.stats.anova_lm(model, typ=2)
+                
+                st.markdown("**Analysis of Variance (ANOVA) Table**")
+                st.caption("This table shows which factors significantly impact Seal Strength. Look for p-values (PR(>F)) < 0.05.")
+                st.dataframe(anova_table.style.applymap(lambda x: 'background-color: #eaf5ea' if x < 0.05 else '', subset=['PR(>F)']))
+
                 col1, col2 = st.columns(2)
                 with col1:
                     st.markdown("**Main Effects Plot**")
+                    st.caption("Visualizes the average effect of changing each factor from low to high.")
                     main_effects_data = doe_df.melt(id_vars='seal_strength', value_vars=['temperature', 'pressure'], var_name='factor', value_name='level')
                     main_effects = main_effects_data.groupby(['factor', 'level'])['seal_strength'].mean().reset_index()
                     fig = px.line(main_effects, x='level', y='seal_strength', color='factor', title="Main Effects on Seal Strength", markers=True, labels={'level': 'Factor Level (-1: Low, 1: High)', 'seal_strength': 'Mean Seal Strength'})
                     st.plotly_chart(fig, use_container_width=True)
+
                 with col2:
-                    st.markdown("**Contour Plot (Illustrative)**")
-                    # Simplified model for illustration: fit a 2D polynomial surface
-                    from sklearn.preprocessing import PolynomialFeatures
-                    from sklearn.linear_model import LinearRegression
-                    from sklearn.pipeline import make_pipeline
-                    X = doe_df[['temperature', 'pressure']]
-                    y = doe_df['seal_strength']
-                    model = make_pipeline(PolynomialFeatures(2), LinearRegression())
-                    model.fit(X, y)
+                    st.markdown("**Response Surface Contour Plot**")
+                    st.caption("Visualizes the predicted response across the entire design space.")
                     t_range, p_range = np.linspace(-1.5, 1.5, 30), np.linspace(-1.5, 1.5, 30)
                     t_grid, p_grid = np.meshgrid(t_range, p_range)
-                    grid = np.c_[t_grid.ravel(), p_grid.ravel()]
-                    strength_grid = model.predict(grid).reshape(t_grid.shape)
+                    grid = pd.DataFrame({'temperature': t_grid.ravel(), 'pressure': p_grid.ravel()})
+                    strength_grid = model.predict(grid).values.reshape(t_grid.shape)
                     
-                    fig = go.Figure(data=[go.Contour(z=strength_grid, x=t_range, y=p_range, colorscale='Viridis'), go.Scatter(x=doe_df['temperature'], y=doe_df['pressure'], mode='markers', marker=dict(color='red', size=10, symbol='x'), name='DOE Runs')])
-                    fig.update_layout(xaxis_title="Temperature", yaxis_title="Pressure", title="Predicted Seal Strength Surface")
+                    # Find optimum point
+                    opt_idx = np.unravel_index(np.argmax(strength_grid), strength_grid.shape)
+                    opt_temp, opt_press = t_range[opt_idx[1]], p_range[opt_idx[0]]
+                    opt_strength = strength_grid.max()
+
+                    fig = go.Figure(data=[go.Contour(z=strength_grid, x=t_range, y=p_range, colorscale='Viridis', contours_coloring='lines', line_width=1)])
+                    fig.add_trace(go.Scatter(x=doe_df['temperature'], y=doe_df['pressure'], mode='markers', marker=dict(color='black', size=10, symbol='x'), name='DOE Runs'))
+                    fig.add_trace(go.Scatter(x=[opt_temp], y=[opt_press], mode='markers+text', marker=dict(color='red', size=16, symbol='star'), text=[' Optimum'], textposition="top right", name='Predicted Optimum'))
+                    fig.update_layout(xaxis_title="Temperature", yaxis_title="Pressure", title=f"Predicted Seal Strength (Max: {opt_strength:.1f})")
                     st.plotly_chart(fig, use_container_width=True)
             else: st.warning("DOE data is not available.")
-        except ImportError: st.error("Please install scikit-learn (`pip install scikit-learn`) for advanced DOE visualization.")
         except Exception as e: st.error("Could not generate DOE plots."); logger.error(f"Error in DOE Analysis tool: {e}", exc_info=True)
-    
 
 def render_machine_learning_lab_tab(ssm: SessionStateManager):
     """Renders the Machine Learning Lab tab with predictive models."""
@@ -703,7 +1000,6 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
         else:
             st.info("Not enough historical data (e.g., tasks marked 'At Risk') to train a predictive model yet.")
 
-
 def render_compliance_guide_tab():
     """Renders the static educational content for the QE & Compliance Guide tab."""
     st.header("🏛️ A Guide to Design Controls & the Regulatory Landscape")
@@ -791,7 +1087,7 @@ def main() -> None:
     # --- MAIN TABS ---
     tab_names = [
         "📊 **DHF Health Dashboard**", "🗂️ **DHF Sections Explorer**",
-        "🔬 **Advanced Analytics**", "📈 **Statistical Analysis Tools**",
+        "🔬 **Advanced Analytics**", "📈 **Statistical Workbench**",
         "🤖 **Machine Learning Lab**", "🏛️ **QE & Compliance Guide**"
     ]
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(tab_names)
