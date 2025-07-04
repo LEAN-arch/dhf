@@ -23,22 +23,12 @@ logger = logging.getLogger(__name__)
 def _create_definitive_dhf_model(version: int) -> Dict[str, Any]:
     """
     Generates the complete, interconnected mock dataset for the DHF.
-
-    This function is the single source of truth for all mock data, ensuring
-    a consistent and realistic data model for the application. It is kept
-    separate from the SessionStateManager class for improved code organization.
-
-    Args:
-        version (int): The data model version to bake into the dataset.
-
-    Returns:
-        Dict[str, Any]: A dictionary representing the entire DHF data model.
+    This version includes a more realistic set of design reviews to generate
+    a meaningful burndown chart.
     """
-    base_date = date(2025, 7, 1)  # Project Start Date
-    demo_current_date = base_date + timedelta(days=90)  # Simulates "Today"
-
-    # --- Data Generation Helper ---
-    # Use standard library `random` to avoid numpy dependency for mock data.
+    base_date = date(2025, 7, 1)
+    # Simulate "Today" as being further into the project to have more history
+    demo_current_date = base_date + timedelta(days=120) 
     gauss = random.gauss
 
     return {
@@ -89,24 +79,40 @@ def _create_definitive_dhf_model(version: int) -> Dict[str, Any]:
         },
         "design_outputs": {
             "documents": [
-                # FIX: Phase name now exactly matches the corresponding task name for correct filtering.
                 {"id": "DO-001", "title": "User Needs Document", "phase": "User Needs & Planning", "status": "Approved", "linked_input_id": "UN-001"},
                 {"id": "DO-002", "title": "System Requirements Spec", "phase": "Design Inputs", "status": "Approved", "linked_input_id": "UN-002"},
                 {"id": "SPEC-001", "title": "Pill Casing Final CAD Model", "phase": "Design Outputs", "status": "In Review", "linked_input_id": "SR-001"},
                 {"id": "SPEC-002", "title": "Dose Release Mechanism Spec", "phase": "Design Outputs", "status": "Draft", "linked_input_id": "RC-001"},
-                # FIX: Phase name now exactly matches the corresponding task name for correct filtering.
                 {"id": "PROTO-001", "title": "Biocompatibility Test Protocol", "phase": "Verification & Validation", "status": "Draft", "linked_input_id": "RC-002"},
             ]
         },
+        # REALISTIC DATA FIX: Overhauled design reviews to create a real burndown story
         "design_reviews": {
             "reviews": [
                 {
-                    "date": str(demo_current_date - timedelta(days=30)), "attendees": "A. Weber, B. Chen, Jose Bautista", "notes": "Phase 1 Gate Review completed. Approved to proceed to detailed design.", "is_gate_review": True,
+                    "date": str(demo_current_date - timedelta(days=60)),
+                    "attendees": "A. Weber, B. Chen", "notes": "Concept review complete. Feasibility approved.", "is_gate_review": False,
+                    "action_items": [
+                        {"id": "AI-CR-01", "description": "Source alternative polymers.", "owner": "B. Chen", "due_date": str(demo_current_date - timedelta(days=45)), "status": "Completed"},
+                        {"id": "AI-CR-02", "description": "Perform initial battery life modeling.", "owner": "C. Day", "due_date": str(demo_current_date - timedelta(days=50)), "status": "Completed"},
+                    ]
+                },
+                {
+                    "date": str(demo_current_date - timedelta(days=30)),
+                    "attendees": "A. Weber, B. Chen, Jose Bautista", "notes": "Phase 1 Gate Review completed. Approved to proceed to detailed design.", "is_gate_review": True,
                     "action_items": [
                         {"id": "AI-DR1-01", "description": "Finalize biocompatible polymer selection.", "owner": "B. Chen", "due_date": str(demo_current_date - timedelta(days=15)), "status": "Completed"},
-                        {"id": "AI-DR1-02", "description": "Update Risk Management File with review outputs.", "owner": "Jose Bautista", "due_date": str(demo_current_date + timedelta(days=5)), "status": "In Progress"},
+                        {"id": "AI-DR1-02", "description": "Update Risk Management File with review outputs.", "owner": "Jose Bautista", "due_date": str(demo_current_date - timedelta(days=5)), "status": "In Progress"},
                         {"id": "AI-DR1-03", "description": "Draft V&V Master Plan.", "owner": "Jose Bautista", "due_date": str(demo_current_date + timedelta(days=15)), "status": "Open"},
-                        {"id": "AI-DR1-04", "description": "Prototype firmware for Bluetooth comms.", "owner": "C. Day", "due_date": str(demo_current_date - timedelta(days=2)), "status": "Overdue"},
+                        {"id": "AI-DR1-04", "description": "Prototype firmware for Bluetooth comms.", "owner": "C. Day", "due_date": str(demo_current_date - timedelta(days=28)), "status": "Overdue"},
+                    ]
+                },
+                {
+                    "date": str(demo_current_date - timedelta(days=10)),
+                    "attendees": "C. Day, Jose Bautista", "notes": "Software architecture review for cybersecurity.", "is_gate_review": False,
+                    "action_items": [
+                        {"id": "AI-SWR-01", "description": "Implement encryption for data transmission.", "owner": "C. Day", "due_date": str(demo_current_date + timedelta(days=10)), "status": "Open"},
+                        {"id": "AI-SWR-02", "description": "Add threat model to risk file.", "owner": "Jose Bautista", "due_date": str(demo_current_date + timedelta(days=5)), "status": "In Progress"},
                     ]
                 }
             ]
@@ -174,15 +180,9 @@ def _create_definitive_dhf_model(version: int) -> Dict[str, Any]:
 class SessionStateManager:
     """
     Handles the initialization and access of the application's session state.
-
-    This manager populates `st.session_state` with a complete mock DHF dataset
-    if it doesn't exist or if the data version is outdated. It provides
-    helper methods to safely get and update data from the state.
     """
     _DHF_DATA_KEY = "dhf_data"
-    # Incrementing version forces a reload of the data model on app rerun
-    # if the code changes, ensuring developers always have the latest mock data.
-    _CURRENT_DATA_VERSION = 21
+    _CURRENT_DATA_VERSION = 22 # Incremented to reflect new data model
 
     def __init__(self):
         """
@@ -197,14 +197,6 @@ class SessionStateManager:
     def get_data(self, primary_key: str, secondary_key: Optional[str] = None) -> Any:
         """
         Safely retrieves data from the session state.
-
-        Args:
-            primary_key (str): The first-level key in the data dictionary.
-            secondary_key (Optional[str]): The second-level key, if applicable.
-
-        Returns:
-            Any: The requested data. Returns an empty dict or list if the key(s)
-                 are not found to prevent downstream errors.
         """
         try:
             data_store = st.session_state[self._DHF_DATA_KEY]
@@ -219,11 +211,6 @@ class SessionStateManager:
     def update_data(self, data: Any, primary_key: str, secondary_key: Optional[str] = None) -> None:
         """
         Updates data in the session state.
-
-        Args:
-            data (Any): The new data to be stored.
-            primary_key (str): The first-level key in the data dictionary.
-            secondary_key (Optional[str]): The second-level key, if applicable.
         """
         if secondary_key:
             if primary_key not in st.session_state[self._DHF_DATA_KEY]:
