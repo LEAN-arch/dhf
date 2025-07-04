@@ -151,12 +151,12 @@ class SessionStateManager:
             "design_reviews": {
                 "reviews": [
                     {
-                        "date": demo_current_date - timedelta(days=30), "attendees": "A. Weber, B. Chen, JOSE BAUTISTA", "notes": "Phase 1 Gate Review completed. Approved to proceed to detailed design.", "is_gate_review": True,
+                        "date": str(demo_current_date - timedelta(days=30)), "attendees": "A. Weber, B. Chen, JOSE BAUTISTA", "notes": "Phase 1 Gate Review completed. Approved to proceed to detailed design.", "is_gate_review": True,
                         "action_items": [
                             {"id": "AI-DR1-01", "description": "Finalize biocompatible polymer selection.", "owner": "B. Chen", "due_date": str(demo_current_date - timedelta(days=15)), "status": "Completed"},
                             {"id": "AI-DR1-02", "description": "Update Risk Management File with review outputs.", "owner": "JOSE BAUTISTA", "due_date": str(demo_current_date + timedelta(days=5)), "status": "In Progress"},
                             {"id": "AI-DR1-03", "description": "Draft V&V Master Plan.", "owner": "JOSE BAUTISTA", "due_date": str(demo_current_date + timedelta(days=15)), "status": "Open"},
-                            {"id": "AI-DR1-04", "description": "Prototype firmware for Bluetooth comms.", "owner": "C. Day", "due_date": str(demo_current_date - timedelta(days=2)), "status": "In Progress"}, # Intentionally overdue
+                            {"id": "AI-DR1-04", "description": "Prototype firmware for Bluetooth comms.", "owner": "C. Day", "due_date": str(demo_current_date - timedelta(days=2)), "status": "In Progress"},
                         ]
                     }
                 ]
@@ -195,7 +195,6 @@ class SessionStateManager:
                     ],
                     "batch_record_review": {"total": 5, "passed": 4, "failed": 1}
                 },
-                # Data for AI & Stat Tools Tab
                 "spc_data": {"target": 7.95, "usl": 8.00, "lsl": 7.90, "measurements": np.random.normal(7.95, 0.02, 50).tolist()},
                 "hypothesis_testing_data": {"line_a": np.random.normal(99.8, 0.2, 30).tolist(), "line_b": np.random.normal(99.9, 0.15, 30).tolist()},
                 "doe_data": [
@@ -220,86 +219,3 @@ class SessionStateManager:
                 ]
             }
         }
-
-# ==============================================================================
-# --- UNIT TEST SCAFFOLDING (for `pytest`) ---
-# ==============================================================================
-"""
-import unittest
-from unittest.mock import patch, MagicMock
-
-# To run tests, place this in a 'tests' directory and run pytest.
-# Requires `pytest-mock` to mock Streamlit's session state.
-# from dhf_dashboard.utils.session_state_manager import SessionStateManager
-
-class TestSessionStateManager(unittest.TestCase):
-
-    @patch('dhf_dashboard.utils.session_state_manager.st')
-    def test_initialization_loads_data(self, mock_st):
-        '''Tests that data is loaded into session_state if it's missing.'''
-        mock_st.session_state = {}  # Simulate an empty session state
-        mock_st.toast = MagicMock()
-
-        ssm = SessionStateManager()
-
-        mock_st.toast.assert_called_once()
-        self.assertIn('dhf_data', mock_st.session_state)
-        self.assertEqual(mock_st.session_state['dhf_data']['data_version'], ssm._CURRENT_DATA_VERSION)
-        self.assertEqual(mock_st.session_state['dhf_data']['design_plan']['project_name'], 'Smart-Pill Drug Delivery System (SP-DDS)')
-
-    @patch('dhf_dashboard.utils.session_state_manager.st')
-    def test_initialization_skips_loading_if_data_exists(self, mock_st):
-        '''Tests that data is NOT re-loaded if it already exists with the current version.'''
-        # Simulate a pre-populated session state
-        mock_st.session_state = {
-            'dhf_data': {
-                'data_version': SessionStateManager._CURRENT_DATA_VERSION,
-                'design_plan': {'project_name': 'Existing Project'}
-            }
-        }
-        mock_st.toast = MagicMock()
-
-        ssm = SessionStateManager()
-
-        mock_st.toast.assert_not_called()
-        self.assertEqual(mock_st.session_state['dhf_data']['design_plan']['project_name'], 'Existing Project')
-
-    @patch('dhf_dashboard.utils.session_state_manager.st')
-    def test_get_data(self, mock_st):
-        '''Tests the get_data method for both primary and secondary keys.'''
-        mock_st.session_state = {
-            'dhf_data': {
-                'design_plan': {'project_name': 'Test Project'},
-                'risk_management_file': {'hazards': [{'id': 'H-001'}]}
-            }
-        }
-        ssm = SessionStateManager()
-
-        # Test getting a primary key
-        design_plan = ssm.get_data('design_plan')
-        self.assertEqual(design_plan, {'project_name': 'Test Project'})
-
-        # Test getting a secondary key
-        hazards = ssm.get_data('risk_management_file', 'hazards')
-        self.assertEqual(hazards, [{'id': 'H-001'}])
-
-        # Test getting non-existent keys
-        self.assertEqual(ssm.get_data('non_existent_key'), {})
-        self.assertEqual(ssm.get_data('design_plan', 'non_existent_secondary'), [])
-
-    @patch('dhf_dashboard.utils.session_state_manager.st')
-    def test_update_data(self, mock_st):
-        '''Tests the update_data method.'''
-        mock_st.session_state = {'dhf_data': {}}
-        ssm = SessionStateManager()
-
-        # Test updating a primary key
-        new_plan = {'project_name': 'Updated Project'}
-        ssm.update_data(new_plan, 'design_plan')
-        self.assertEqual(mock_st.session_state['dhf_data']['design_plan'], new_plan)
-
-        # Test updating a secondary key
-        new_hazards = [{'id': 'H-002'}]
-        ssm.update_data(new_hazards, 'risk_management_file', 'hazards')
-        self.assertEqual(mock_st.session_state['dhf_data']['risk_management_file']['hazards'], new_hazards)
-"""
