@@ -113,6 +113,7 @@ def get_cached_df(data: List[Dict[str, Any]]) -> pd.DataFrame:
 
 # ==============================================================================
 # --- DASHBOARD DEEP-DIVE COMPONENT FUNCTIONS ---
+# NOTE: THESE ARE THE FULL DEFINITIONS THAT WERE PREVIOUSLY MISSING
 # ==============================================================================
 
 def render_dhf_completeness_panel(ssm: SessionStateManager, tasks_df: pd.DataFrame) -> None:
@@ -445,12 +446,9 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
     # --- Schedule Performance Score ---
     schedule_score = 0
     if not tasks_df.empty:
-        # Penalize for tasks that are "In Progress" but past their end date.
         today = pd.to_datetime('today')
         overdue_in_progress = tasks_df[(tasks_df['status'] == 'In Progress') & (tasks_df['end_date'] < today)]
         total_in_progress = tasks_df[tasks_df['status'] == 'In Progress']
-        
-        # Simple schedule adherence metric
         adherence = (1 - (len(overdue_in_progress) / len(total_in_progress))) * 100 if not total_in_progress.empty else 100
         schedule_score = adherence
 
@@ -462,7 +460,6 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
         hazards_df['final_rpn'] = hazards_df['final_S'] * hazards_df['final_O'] * hazards_df['final_D']
         initial_rpn_sum = hazards_df['initial_rpn'].sum()
         final_rpn_sum = hazards_df['final_rpn'].sum()
-        # Score is based on percentage of risk reduced.
         risk_reduction_pct = ((initial_rpn_sum - final_rpn_sum) / initial_rpn_sum) * 100 if initial_rpn_sum > 0 else 100
         risk_score = max(0, risk_reduction_pct)
     
@@ -475,7 +472,6 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
         open_items = action_items_df[action_items_df['status'] != 'Completed']
         if not open_items.empty:
             overdue_items_count = len(open_items[open_items['status'] == 'Overdue'])
-            # Score degrades based on the proportion of overdue items.
             execution_score = (1 - (overdue_items_count / len(open_items))) * 100
 
     # --- Overall Health Score (Weighted Average) ---
@@ -510,29 +506,22 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
     
     st.header("Executive Health Summary")
     
-    # --- Main Health Score Gauge ---
     col1, col2 = st.columns([1.5, 2])
     with col1:
         fig = go.Figure(go.Indicator(
-            mode = "gauge+number",
-            value = overall_health_score,
+            mode = "gauge+number", value = overall_health_score,
             title = {'text': "<b>Overall Project Health Score</b>"},
-            number = {'font': {'size': 48}},
-            domain = {'x': [0, 1], 'y': [0, 1]},
+            number = {'font': {'size': 48}}, domain = {'x': [0, 1], 'y': [0, 1]},
             gauge = {
                 'axis': {'range': [None, 100]},
                 'bar': {'color': "green" if overall_health_score > 80 else "orange" if overall_health_score > 60 else "red"},
-                'steps' : [
-                    {'range': [0, 60], 'color': "#fdecec"},
-                    {'range': [60, 80], 'color': "#fef3e7"},
-                    {'range': [80, 100], 'color': "#eaf5ea"}],
+                'steps' : [{'range': [0, 60], 'color': "#fdecec"}, {'range': [60, 80], 'color': "#fef3e7"}, {'range': [80, 100], 'color': "#eaf5ea"}],
             }))
         fig.update_layout(height=250, margin=dict(l=20, r=20, t=50, b=20))
         st.plotly_chart(fig, use_container_width=True)
 
-    # --- Sub-Scores that feed into the main score ---
     with col2:
-        st.markdown("<br>", unsafe_allow_html=True) # Spacer
+        st.markdown("<br>", unsafe_allow_html=True) 
         sub_col1, sub_col2, sub_col3 = st.columns(3)
         sub_col1.metric("Schedule Performance", f"{schedule_score:.0f}/100", help=f"Weighted at {weights['schedule']*100}%. Based on adherence of active tasks to their planned end dates.")
         sub_col2.metric("Quality & Risk Posture", f"{risk_score:.0f}/100", help=f"Weighted at {weights['quality']*100}%. Based on the percentage of initial RPN that has been mitigated.")
@@ -541,7 +530,6 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
 
     st.divider()
 
-    # --- Key Health Indicators (KHIs) Panel ---
     st.subheader("Key Health Indicators (KHIs)")
     khi_col1, khi_col2, khi_col3, khi_col4 = st.columns(4)
     with khi_col1:
@@ -557,28 +545,20 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
     
     st.divider()
     
-    # --- Action Item Burn-down Chart ---
     st.subheader("Action Item Burn-down (Last 30 Days)")
     if not action_items_df.empty:
         df = action_items_df.copy()
         df['due_date'] = pd.to_datetime(df['due_date'], errors='coerce')
-        # Simulate creation date for burndown chart logic
         df['created_date'] = df['due_date'] - pd.to_timedelta(np.random.randint(10, 30, len(df)), unit='d')
-        
-        # Create a date range for the last 30 days
         today = pd.to_datetime('today')
         date_range = pd.date_range(end=today, periods=30, freq='D')
-        
         opened_series = df.set_index('created_date').resample('D').size().reindex(date_range, fill_value=0)
-        
         completed_items = df[df['status']=='Completed'].copy()
         completed_items['completion_date'] = completed_items['due_date'] - pd.to_timedelta(np.random.randint(0, 5, len(completed_items)), unit='d')
         closed_series = completed_items.set_index('completion_date').resample('D').size().reindex(date_range, fill_value=0)
-        
         net_change = opened_series - closed_series
         initial_open = len(df[df['created_date'] < date_range.min()]) - len(completed_items[completed_items['completion_date'] < date_range.min()])
         burndown = net_change.cumsum() + initial_open
-        
         fig = go.Figure()
         fig.add_trace(go.Scatter(x=burndown.index, y=burndown.values, mode='lines+markers', name='Open Items', fill='tozeroy'))
         fig.update_layout(title="Trend of Total Open Action Items", yaxis_title="Number of Open Items", height=300)
@@ -588,21 +568,13 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
 
     st.divider()
     
-    # ==========================================================================
-    # --- 3. DEEP DIVE PANELS ---
-    # ==========================================================================
-    
     st.header("Deep Dives")
-    
     with st.expander("Expand to see Phase Gate Readiness & Timeline Details"):
         render_dhf_completeness_panel(ssm, tasks_df)
-
     with st.expander("Expand to see Risk & FMEA Details"):
         render_risk_and_fmea_dashboard(ssm)
-
     with st.expander("Expand to see QbD and Manufacturing Readiness Details"):
         render_qbd_and_cgmp_panel(ssm)
-
     with st.expander("Expand to see Audit & Continuous Improvement Details"):
         render_audit_and_improvement_dashboard(ssm)
 
@@ -628,16 +600,13 @@ def render_advanced_analytics_tab(ssm: SessionStateManager):
         st.warning("Directly edit project timelines, statuses, and dependencies. Changes are saved automatically.", icon="⚠️")
         try:
             tasks_df_to_edit = pd.DataFrame(ssm.get_data("project_management", "tasks"))
-            # Convert to datetime for the editor widget
             tasks_df_to_edit['start_date'] = pd.to_datetime(tasks_df_to_edit['start_date'], errors='coerce')
             tasks_df_to_edit['end_date'] = pd.to_datetime(tasks_df_to_edit['end_date'], errors='coerce')
-
             edited_df = st.data_editor(
                 tasks_df_to_edit, key="main_task_editor", num_rows="dynamic", use_container_width=True,
                 column_config={"start_date": st.column_config.DateColumn("Start Date", format="YYYY-MM-DD", required=True),
                                "end_date": st.column_config.DateColumn("End Date", format="YYYY-MM-DD", required=True)}
             )
-            # Convert back to string for JSON serialization if changes were made
             if not tasks_df_to_edit.equals(edited_df):
                 df_to_save = edited_df.copy()
                 df_to_save['start_date'] = df_to_save['start_date'].dt.strftime('%Y-%m-%d').replace({pd.NaT: None})
@@ -652,60 +621,38 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
     """Renders the Statistical Workbench tab with professionally enhanced tools."""
     st.header("📈 Statistical Workbench")
     st.info("Utilize this interactive workbench to apply rigorous statistical methods, moving from raw data to actionable, data-driven decisions.")
-
     try:
-        # Import advanced stats libraries here to keep dependencies local to the tab
         import statsmodels.api as sm
         from statsmodels.formula.api import ols
         from scipy.stats import shapiro, mannwhitneyu
     except ImportError:
         st.error("This tab requires `statsmodels` and `scipy`. Please install them (`pip install statsmodels scipy`) to enable statistical tools.", icon="🚨")
         return
-
     tool_tabs = st.tabs(["Process Control (SPC)", "Hypothesis Testing (A/B Test)", "Pareto Analysis (FMEA)", "Design of Experiments (DOE)"])
-    
     with tool_tabs[0]:
         st.subheader("Statistical Process Control (SPC) with Rule Checking")
         st.markdown("Monitor process stability by distinguishing natural variation from signals that require investigation.")
         with st.expander("The 'Why' and the 'How'"):
             st.markdown("##### The 'Why': Voice of the Process vs. Voice of the Customer")
-            st.markdown("""
-            - **Specification Limits (USL/LSL):** The 'voice of the customer' or engineer. They define what is acceptable for the product to function.
-            - **Control Limits (UCL/LCL):** The 'voice of the process'. Calculated from the data, they define the bounds of natural, expected variation.
-            **A process can be *in control* but still produce parts *out of specification*, and vice-versa.** This tool helps diagnose both issues.
-            """)
+            st.markdown("""- **Specification Limits (USL/LSL):** The 'voice of the customer' or engineer. They define what is acceptable for the product to function.\n- **Control Limits (UCL/LCL):** The 'voice of the process'. Calculated from the data, they define the bounds of natural, expected variation.\n**A process can be *in control* but still produce parts *out of specification*, and vice-versa.** This tool helps diagnose both issues.""")
             st.markdown("##### The 'How': Automated Rule Checking")
-            st.markdown("Beyond just plotting, this tool programmatically applies common **Nelson Rules** to detect instability. A process is flagged as 'UNSTABLE' if, for example:")
-            st.markdown("- **Rule 1:** One or more points fall outside the control limits (±3σ).\n- **Rule 2:** Nine or more consecutive points fall on the same side of the centerline.")
-        
+            st.markdown("Beyond just plotting, this tool programmatically applies common **Nelson Rules** to detect instability. A process is flagged as 'UNSTABLE' if, for example:\n- **Rule 1:** One or more points fall outside the control limits (±3σ).\n- **Rule 2:** Nine or more consecutive points fall on the same side of the centerline.")
         def check_spc_rules(data: np.ndarray, mu: float, sigma: float) -> List[str]:
-            """Applies basic SPC rules to check for instability."""
             violations = []
-            # Rule 1: Point outside 3-sigma limits
-            if np.any(data > mu + 3 * sigma) or np.any(data < mu - 3 * sigma):
-                violations.append("Rule 1: Point(s) exist beyond ±3σ from the centerline.")
-            # Rule 2: 9 consecutive points on one side
+            if np.any(data > mu + 3 * sigma) or np.any(data < mu - 3 * sigma): violations.append("Rule 1: Point(s) exist beyond ±3σ from the centerline.")
             for i in range(len(data) - 8):
                 if all(data[i:i+9] > mu) or all(data[i:i+9] < mu):
-                    violations.append("Rule 2: 9 consecutive points on one side of the centerline.")
-                    break
+                    violations.append("Rule 2: 9 consecutive points on one side of the centerline."); break
             return violations
-
         try:
             spc_data = ssm.get_data("quality_system", "spc_data")
             if spc_data and all(k in spc_data for k in ['measurements', 'target', 'usl', 'lsl']):
-                meas = np.array(spc_data['measurements'])
-                mu, sigma = meas.mean(), meas.std()
-                ucl, lcl = mu + 3 * sigma, mu - 3 * sigma
-                
+                meas = np.array(spc_data['measurements']); mu, sigma = meas.mean(), meas.std(); ucl, lcl = mu + 3 * sigma, mu - 3 * sigma
                 violations = check_spc_rules(meas, mu, sigma)
                 if violations:
                     st.error(f"**Process Status: UNSTABLE**\n\nViolations Detected:", icon="🚨")
-                    for v in violations:
-                        st.markdown(f"- {v}")
-                else:
-                    st.success("**Process Status: STABLE**\n\nNo common rule violations were detected.", icon="✅")
-
+                    for v in violations: st.markdown(f"- {v}")
+                else: st.success("**Process Status: STABLE**\n\nNo common rule violations were detected.", icon="✅")
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(y=meas, name='Measurements', mode='lines+markers', line=dict(color='#1f77b4')))
                 fig.add_hline(y=spc_data['target'], line_dash="dash", line_color="green", annotation_text="Target")
@@ -715,10 +662,8 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
                 fig.add_hline(y=lcl, line_dash="dashdot", line_color="orange", annotation_text="LCL (Process Voice)")
                 fig.update_layout(title="SPC Chart for Pill Casing Diameter", yaxis_title="Diameter (mm)")
                 st.plotly_chart(fig, use_container_width=True)
-
             else: st.warning("SPC data is incomplete or missing.")
         except Exception as e: st.error("Could not render SPC chart."); logger.error(f"Error in SPC tool: {e}", exc_info=True)
-
     with tool_tabs[1]:
         st.subheader("Hypothesis Testing with Assumption Checks")
         st.markdown("Rigorously determine if a statistically significant difference exists between two groups (e.g., Supplier A vs. Supplier B).")
@@ -726,56 +671,35 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
             st.markdown("##### The 'Why': Data-Driven Sourcing and Process Changes")
             st.markdown("This tool prevents decisions based on 'gut feel'. For example, before committing to a more expensive supplier, you can prove their material is *statistically stronger*, justifying the cost. It provides objective evidence for change control records.")
             st.markdown("##### The 'How': A Statistically Robust Workflow")
-            st.markdown("""
-            1.  **Check for Normality:** Many statistical tests, like the t-test, assume the data is normally distributed. We first use the **Shapiro-Wilk test**. If the p-value is high (> 0.05), we can assume normality.
-            2.  **Select the Right Test:**
-                - If data is **normal**, we use **Welch's t-test**, a robust version of the t-test that doesn't assume equal variances.
-                - If data is **not normal**, we automatically switch to the **Mann-Whitney U test**, a non-parametric equivalent that compares medians instead of means.
-            3.  **Interpret the Result:** We compare the final p-value to our significance level (α = 0.05) to conclude if a significant difference exists.
-            """)
+            st.markdown("""1.  **Check for Normality:** Many statistical tests, like the t-test, assume the data is normally distributed. We first use the **Shapiro-Wilk test**. If the p-value is high (> 0.05), we can assume normality.\n2.  **Select the Right Test:**\n    - If data is **normal**, we use **Welch's t-test**, a robust version of the t-test that doesn't assume equal variances.\n    - If data is **not normal**, we automatically switch to the **Mann-Whitney U test**, a non-parametric equivalent that compares medians instead of means.\n3.  **Interpret the Result:** We compare the final p-value to our significance level (α = 0.05) to conclude if a significant difference exists.""")
         try:
             ht_data = ssm.get_data("quality_system", "hypothesis_testing_data")
             if ht_data and all(k in ht_data for k in ['line_a', 'line_b']):
                 line_a, line_b = ht_data['line_a'], ht_data['line_b']
-                
-                # 1. Assumption Check: Normality
-                shapiro_a = shapiro(line_a)
-                shapiro_b = shapiro(line_b)
+                shapiro_a = shapiro(line_a); shapiro_b = shapiro(line_b)
                 is_normal = shapiro_a.pvalue > 0.05 and shapiro_b.pvalue > 0.05
-
                 col1, col2 = st.columns(2)
                 with col1:
                     st.markdown("**1. Assumption Check (Normality)**")
-                    st.caption(f"Shapiro-Wilk p-value for Line A: {shapiro_a.pvalue:.3f}")
-                    st.caption(f"Shapiro-Wilk p-value for Line B: {shapiro_b.pvalue:.3f}")
-
+                    st.caption(f"Shapiro-Wilk p-value for Line A: {shapiro_a.pvalue:.3f}"); st.caption(f"Shapiro-Wilk p-value for Line B: {shapiro_b.pvalue:.3f}")
                     st.markdown("**2. Statistical Test Execution**")
                     if is_normal:
                         st.info("Data appears normally distributed. Performing Welch's t-test.", icon="✅")
-                        stat, p_value = stats.ttest_ind(line_a, line_b, equal_var=False)
-                        test_name = "Welch's t-test"
+                        stat, p_value = stats.ttest_ind(line_a, line_b, equal_var=False); test_name = "Welch's t-test"
                     else:
                         st.warning("Data may not be normal. Switching to non-parametric Mann-Whitney U test.", icon="⚠️")
-                        stat, p_value = mannwhitneyu(line_a, line_b)
-                        test_name = "Mann-Whitney U test"
-                    
-                    st.metric(f"{test_name} Statistic", f"{stat:.3f}")
-                    st.metric("P-value", f"{p_value:.3f}")
-
+                        stat, p_value = mannwhitneyu(line_a, line_b); test_name = "Mann-Whitney U test"
+                    st.metric(f"{test_name} Statistic", f"{stat:.3f}"); st.metric("P-value", f"{p_value:.3f}")
                     st.markdown("**3. Conclusion**")
-                    if p_value < 0.05:
-                        st.success(f"**Conclusion:** A statistically significant difference exists between the two lines (p < 0.05).")
-                    else:
-                        st.warning(f"**Conclusion:** We cannot conclude a statistically significant difference exists (p >= 0.05).")
+                    if p_value < 0.05: st.success(f"**Conclusion:** A statistically significant difference exists between the two lines (p < 0.05).")
+                    else: st.warning(f"**Conclusion:** We cannot conclude a statistically significant difference exists (p >= 0.05).")
                 with col2:
                     df_ht = pd.concat([pd.DataFrame({'value': line_a, 'line': 'Line A'}), pd.DataFrame({'value': line_b, 'line': 'Line B'})])
                     fig = px.box(df_ht, x='line', y='value', title="Distribution Comparison", points="all", labels={'value': 'Seal Strength'})
                     st.plotly_chart(fig, use_container_width=True)
             else: st.warning("Hypothesis testing data is incomplete or missing.")
         except Exception as e: st.error("Could not perform Hypothesis Test."); logger.error(f"Error in Hypothesis Testing tool: {e}", exc_info=True)
-
     with tool_tabs[2]:
-        # This section is already quite good, minor text enhancements.
         st.subheader("Pareto Analysis of FMEA Risk")
         st.markdown("Applies the 80/20 rule to FMEA data to identify the 'vital few' failure modes that drive the majority of risk, enabling focused mitigation efforts.")
         with st.expander("The 'Why' and the 'How'"):
@@ -796,7 +720,6 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
                 st.plotly_chart(fig, use_container_width=True)
             else: st.warning("No FMEA data available for Pareto analysis.")
         except Exception as e: st.error("Could not generate Pareto chart."); logger.error(f"Error in Pareto Analysis tool: {e}", exc_info=True)
-    
     with tool_tabs[3]:
         st.subheader("Design of Experiments (DOE) with ANOVA")
         st.markdown("Efficiently determine which process inputs (**factors**) and their interactions significantly impact a key output (**response**).")
@@ -804,47 +727,28 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
             st.markdown("##### The 'Why': Optimize Your Process, Don't Just Guess")
             st.markdown("Instead of testing 'one factor at a time' (OFAT), which is inefficient and misses interactions, DOE allows you to explore the entire **design space**. It provides a mathematical model of your process, enabling you to find the optimal settings to maximize performance and robustness.")
             st.markdown("##### The 'How': Regression Modeling and ANOVA")
-            st.markdown("""
-            1.  **Fit a Model:** We use a statistical technique called Ordinary Least Squares (OLS) to fit a linear model to the data. The formula `seal_strength ~ temperature * pressure` tells the model to consider the main effects of Temperature, Pressure, and their **interaction effect (Temp:Pressure)**.
-            2.  **Analyze Variance (ANOVA):** We then generate an ANOVA table from the model. This table is the core result. It breaks down the variance in the response and attributes it to each factor. **A low p-value (< 0.05) for a factor in the ANOVA table means it has a statistically significant effect on the response.**
-            3.  **Visualize and Optimize:** The Main Effects plot shows the direction of influence, while the Contour Plot visualizes the modeled response surface. We then programmatically find and display the settings that yield the predicted maximum response.
-            """)
+            st.markdown("""1.  **Fit a Model:** We use a statistical technique called Ordinary Least Squares (OLS) to fit a linear model to the data. The formula `seal_strength ~ temperature * pressure` tells the model to consider the main effects of Temperature, Pressure, and their **interaction effect (Temp:Pressure)**.\n2.  **Analyze Variance (ANOVA):** We then generate an ANOVA table from the model. This table is the core result. It breaks down the variance in the response and attributes it to each factor. **A low p-value (< 0.05) for a factor in the ANOVA table means it has a statistically significant effect on the response.**\n3.  **Visualize and Optimize:** The Main Effects plot shows the direction of influence, while the Contour Plot visualizes the modeled response surface. We then programmatically find and display the settings that yield the predicted maximum response.""")
         try:
             doe_df = get_cached_df(ssm.get_data("quality_system", "doe_data"))
             if not doe_df.empty:
-                # Fit the OLS model
-                formula = 'seal_strength ~ temperature * pressure'
-                model = ols(formula, data=doe_df).fit()
-                
-                # Get the ANOVA table
+                formula = 'seal_strength ~ temperature * pressure'; model = ols(formula, data=doe_df).fit()
                 anova_table = sm.stats.anova_lm(model, typ=2)
-                
-                st.markdown("**Analysis of Variance (ANOVA) Table**")
-                st.caption("This table shows which factors significantly impact Seal Strength. Look for p-values (PR(>F)) < 0.05.")
+                st.markdown("**Analysis of Variance (ANOVA) Table**"); st.caption("This table shows which factors significantly impact Seal Strength. Look for p-values (PR(>F)) < 0.05.")
                 st.dataframe(anova_table.style.applymap(lambda x: 'background-color: #eaf5ea' if x < 0.05 else '', subset=['PR(>F)']))
-
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.markdown("**Main Effects Plot**")
-                    st.caption("Visualizes the average effect of changing each factor from low to high.")
+                    st.markdown("**Main Effects Plot**"); st.caption("Visualizes the average effect of changing each factor from low to high.")
                     main_effects_data = doe_df.melt(id_vars='seal_strength', value_vars=['temperature', 'pressure'], var_name='factor', value_name='level')
                     main_effects = main_effects_data.groupby(['factor', 'level'])['seal_strength'].mean().reset_index()
                     fig = px.line(main_effects, x='level', y='seal_strength', color='factor', title="Main Effects on Seal Strength", markers=True, labels={'level': 'Factor Level (-1: Low, 1: High)', 'seal_strength': 'Mean Seal Strength'})
                     st.plotly_chart(fig, use_container_width=True)
-
                 with col2:
-                    st.markdown("**Response Surface Contour Plot**")
-                    st.caption("Visualizes the predicted response across the entire design space.")
-                    t_range, p_range = np.linspace(-1.5, 1.5, 30), np.linspace(-1.5, 1.5, 30)
-                    t_grid, p_grid = np.meshgrid(t_range, p_range)
+                    st.markdown("**Response Surface Contour Plot**"); st.caption("Visualizes the predicted response across the entire design space.")
+                    t_range, p_range = np.linspace(-1.5, 1.5, 30), np.linspace(-1.5, 1.5, 30); t_grid, p_grid = np.meshgrid(t_range, p_range)
                     grid = pd.DataFrame({'temperature': t_grid.ravel(), 'pressure': p_grid.ravel()})
                     strength_grid = model.predict(grid).values.reshape(t_grid.shape)
-                    
-                    # Find optimum point
                     opt_idx = np.unravel_index(np.argmax(strength_grid), strength_grid.shape)
-                    opt_temp, opt_press = t_range[opt_idx[1]], p_range[opt_idx[0]]
-                    opt_strength = strength_grid.max()
-
+                    opt_temp, opt_press = t_range[opt_idx[1]], p_range[opt_idx[0]]; opt_strength = strength_grid.max()
                     fig = go.Figure(data=[go.Contour(z=strength_grid, x=t_range, y=p_range, colorscale='Viridis', contours_coloring='lines', line_width=1)])
                     fig.add_trace(go.Scatter(x=doe_df['temperature'], y=doe_df['pressure'], mode='markers', marker=dict(color='black', size=10, symbol='x'), name='DOE Runs'))
                     fig.add_trace(go.Scatter(x=[opt_temp], y=[opt_press], mode='markers+text', marker=dict(color='red', size=16, symbol='star'), text=[' Optimum'], textposition="top right", name='Predicted Optimum'))
@@ -857,7 +761,6 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
     """Renders the Machine Learning Lab tab with predictive models."""
     st.header("🤖 Machine Learning Lab")
     st.info("Utilize predictive models to forecast outcomes, enabling proactive quality control and project management.")
-
     try:
         from sklearn.ensemble import RandomForestClassifier
         from sklearn.linear_model import LogisticRegression
@@ -866,139 +769,72 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
     except ImportError:
         st.error("This tab requires scikit-learn. Please install it (`pip install scikit-learn`) to enable ML features.", icon="🚨")
         return
-
     ml_tabs = st.tabs(["Predictive Quality (Batch Failure)", "Predictive Project Risk (Task Delay)"])
-
     with ml_tabs[0]:
         st.subheader("Predictive Quality: Manufacturing Batch Failure")
         st.markdown("This model predicts whether a manufacturing batch will **Pass** or **Fail** based on its process parameters, *before* the batch is run.")
-
         with st.expander("The 'Why' and the 'How'"):
             st.markdown("#### The 'Why': Business Justification")
-            st.markdown("""
-            - **Proactive vs. Reactive:** Instead of discovering a failed batch during final inspection (reactive), this model predicts failure ahead of time (proactive).
-            - **COPQ Reduction:** It significantly reduces the Cost of Poor Quality (COPQ) by preventing scrap, rework, and wasted materials.
-            - **Process Understanding:** The model's *feature importances* tell engineers which process parameters have the biggest impact on quality, guiding process optimization efforts (like a DOE).
-            """)
+            st.markdown("""- **Proactive vs. Reactive:** Instead of discovering a failed batch during final inspection (reactive), this model predicts failure ahead of time (proactive).\n- **COPQ Reduction:** It significantly reduces the Cost of Poor Quality (COPQ) by preventing scrap, rework, and wasted materials.\n- **Process Understanding:** The model's *feature importances* tell engineers which process parameters have the biggest impact on quality, guiding process optimization efforts (like a DOE).""")
             st.markdown("#### The 'How': Methodological Approach")
-            st.markdown("""
-            We use a **Random Forest Classifier**. This is an *ensemble* model, meaning it builds many individual Decision Trees and then aggregates their votes to make a final prediction.
-            - **Decision Tree:** A simple, flowchart-like model that makes decisions based on feature values (e.g., "Is `temperature` > 95°C?").
-            - **Random Forest:** By combining hundreds of trees, each trained on a random subset of the data and features, the model becomes much more robust and accurate, reducing the risk of overfitting to the training data.
-            """)
+            st.markdown("""We use a **Random Forest Classifier**. This is an *ensemble* model, meaning it builds many individual Decision Trees and then aggregates their votes to make a final prediction.\n- **Decision Tree:** A simple, flowchart-like model that makes decisions based on feature values (e.g., "Is `temperature` > 95°C?").\n- **Random Forest:** By combining hundreds of trees, each trained on a random subset of the data and features, the model becomes much more robust and accurate, reducing the risk of overfitting to the training data.""")
             st.markdown("#### The 'How': In This Application")
             st.markdown("1. We generate a synthetic dataset of 500 manufacturing batches with features like `temperature`, `pressure`, and `viscosity` and a `status` (Pass/Fail).\n2. We train a Random Forest Classifier on 80% of this data.\n3. We evaluate its performance on the remaining 20% (the test set) and display a **Confusion Matrix**.\n4. We show the **Feature Importances**, revealing which factors the model learned were most predictive of failure.")
-
         @st.cache_data
         def generate_and_train_quality_model():
-            """Generates synthetic quality data and trains a Random Forest model."""
-            np.random.seed(42)
-            n_samples = 500
-            data = {
-                'temperature': np.random.normal(90, 5, n_samples),
-                'pressure': np.random.normal(300, 20, n_samples),
-                'viscosity': np.random.normal(50, 3, n_samples)
-            }
+            np.random.seed(42); n_samples = 500
+            data = {'temperature': np.random.normal(90, 5, n_samples), 'pressure': np.random.normal(300, 20, n_samples), 'viscosity': np.random.normal(50, 3, n_samples)}
             df = pd.DataFrame(data)
-            # Failures are more likely at the extremes
             fail_conditions = (df['temperature'] > 98) | (df['temperature'] < 82) | (df['pressure'] > 330) | (df['viscosity'] < 45)
             df['status'] = np.where(fail_conditions, 'Fail', 'Pass')
             df['status_code'] = df['status'].apply(lambda x: 1 if x == 'Fail' else 0)
-
-            X = df[['temperature', 'pressure', 'viscosity']]
-            y = df['status_code']
+            X = df[['temperature', 'pressure', 'viscosity']]; y = df['status_code']
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
-            
-            model = RandomForestClassifier(n_estimators=100, random_state=42)
-            model.fit(X_train, y_train)
+            model = RandomForestClassifier(n_estimators=100, random_state=42); model.fit(X_train, y_train)
             return model, X, y_test, X_test
-        
         model, X, y_test, X_test = generate_and_train_quality_model()
-        
         col1, col2 = st.columns(2)
         with col1:
-            st.markdown("**Feature Importances**")
-            st.caption("Which process parameters most predict failure?")
+            st.markdown("**Feature Importances**"); st.caption("Which process parameters most predict failure?")
             importances = pd.DataFrame({'feature': X.columns, 'importance': model.feature_importances_}).sort_values('importance', ascending=True)
             fig = px.bar(importances, x='importance', y='feature', orientation='h', title="Model Feature Importances")
-            fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10))
-            st.plotly_chart(fig, use_container_width=True)
-
+            fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10)); st.plotly_chart(fig, use_container_width=True)
         with col2:
-            st.markdown("**Model Performance (Test Set)**")
-            st.caption("How well did the model predict on unseen data?")
-            y_pred = model.predict(X_test)
-            cm = confusion_matrix(y_test, y_pred)
-            fig = px.imshow(cm, text_auto=True, aspect="auto",
-                            labels=dict(x="Predicted", y="Actual", color="Count"),
-                            x=['Pass', 'Fail'], y=['Pass', 'Fail'],
-                            title="Confusion Matrix")
-            fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10))
-            st.plotly_chart(fig, use_container_width=True)
-
+            st.markdown("**Model Performance (Test Set)**"); st.caption("How well did the model predict on unseen data?")
+            y_pred = model.predict(X_test); cm = confusion_matrix(y_test, y_pred)
+            fig = px.imshow(cm, text_auto=True, aspect="auto", labels=dict(x="Predicted", y="Actual", color="Count"), x=['Pass', 'Fail'], y=['Pass', 'Fail'], title="Confusion Matrix")
+            fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10)); st.plotly_chart(fig, use_container_width=True)
     with ml_tabs[1]:
         st.subheader("Predictive Project Risk: Task Delay")
         st.markdown("This model uses historical data to predict the probability of future project tasks becoming **At-Risk** (i.e., delayed).")
-
         with st.expander("The 'Why' and the 'How'"):
             st.markdown("#### The 'Why': Business Justification")
-            st.markdown("""
-            - **Early Warning System:** Provides a data-driven forecast of which tasks are most likely to cause bottlenecks, allowing managers to intervene early.
-            - **Improved Resource Allocation:** Helps focus management attention and resources on the highest-risk tasks.
-            - **Beyond the Gantt Chart:** While a Gantt chart shows the plan, this model predicts deviations from the plan based on learned patterns.
-            """)
+            st.markdown("""- **Early Warning System:** Provides a data-driven forecast of which tasks are most likely to cause bottlenecks, allowing managers to intervene early.\n- **Improved Resource Allocation:** Helps focus management attention and resources on the highest-risk tasks.\n- **Beyond the Gantt Chart:** While a Gantt chart shows the plan, this model predicts deviations from the plan based on learned patterns.""")
             st.markdown("#### The 'How': Methodological Approach")
             st.markdown("We use **Logistic Regression**. Unlike linear regression which predicts a continuous value, logistic regression predicts a probability that an event will occur. It models the probability using the **sigmoid function**:")
             st.latex(r''' P(\text{At-Risk}) = \frac{1}{1 + e^{-z}} \quad \text{where} \quad z = \beta_0 + \beta_1 X_1 + \dots + \beta_n X_n ''')
             st.markdown("The model learns the `β` (beta) coefficients for each feature (e.g., `duration`, `num_dependencies`) to best predict the outcome.")
             st.markdown("#### The 'How': In This Application")
             st.markdown("1. We use the project's own task data, including completed and in-progress tasks, as a training set.\n2. We engineer features: `duration_days`, `num_dependencies`, and `is_critical`.\n3. We train a Logistic Regression model to distinguish between 'At Risk' and 'On Time' tasks.\n4. We use the trained model to predict the probability of delay for all 'Not Started' tasks, visualizing the results for easy interpretation.")
-
         @st.cache_data
         def train_and_predict_risk(tasks: List[Dict]):
-            """Trains a logistic regression model and predicts risk on future tasks."""
-            df = pd.DataFrame(tasks)
-            df['start_date'] = pd.to_datetime(df['start_date'])
-            df['end_date'] = pd.to_datetime(df['end_date'])
-            df['duration_days'] = (df['end_date'] - df['start_date']).dt.days
-            df['num_dependencies'] = df['dependencies'].apply(lambda x: len(x.split(',')) if x else 0)
-            
-            critical_path_ids = find_critical_path(df.copy())
-            df['is_critical'] = df['id'].isin(critical_path_ids).astype(int)
-
-            # Train on tasks that have a definitive status
-            train_df = df[df['status'].isin(['Completed', 'At Risk'])].copy()
-            train_df['target'] = (train_df['status'] == 'At Risk').astype(int)
-            
-            if len(train_df['target'].unique()) < 2: return None # Cannot train if only one class exists
-
-            features = ['duration_days', 'num_dependencies', 'is_critical']
-            X_train = train_df[features]
-            y_train = train_df['target']
-            
-            model = LogisticRegression(random_state=42, class_weight='balanced')
-            model.fit(X_train, y_train)
-
-            # Predict on future tasks
+            df = pd.DataFrame(tasks); df['start_date'] = pd.to_datetime(df['start_date']); df['end_date'] = pd.to_datetime(df['end_date'])
+            df['duration_days'] = (df['end_date'] - df['start_date']).dt.days; df['num_dependencies'] = df['dependencies'].apply(lambda x: len(x.split(',')) if x else 0)
+            critical_path_ids = find_critical_path(df.copy()); df['is_critical'] = df['id'].isin(critical_path_ids).astype(int)
+            train_df = df[df['status'].isin(['Completed', 'At Risk'])].copy(); train_df['target'] = (train_df['status'] == 'At Risk').astype(int)
+            if len(train_df['target'].unique()) < 2: return None
+            features = ['duration_days', 'num_dependencies', 'is_critical']; X_train = train_df[features]; y_train = train_df['target']
+            model = LogisticRegression(random_state=42, class_weight='balanced'); model.fit(X_train, y_train)
             predict_df = df[df['status'] == 'Not Started'].copy()
             if predict_df.empty: return None
-
-            X_predict = predict_df[features]
-            predict_df['risk_probability'] = model.predict_proba(X_predict)[:, 1]
+            X_predict = predict_df[features]; predict_df['risk_probability'] = model.predict_proba(X_predict)[:, 1]
             return predict_df[['name', 'risk_probability']].sort_values('risk_probability', ascending=False)
-
         risk_predictions = train_and_predict_risk(ssm.get_data("project_management", "tasks"))
-
         if risk_predictions is not None:
             st.markdown("**Predicted Delay Probability for Future Tasks**")
-            fig = px.bar(risk_predictions, x='risk_probability', y='name', orientation='h',
-                         title="Forecasted Risk for 'Not Started' Tasks",
-                         labels={'risk_probability': 'Probability of Being "At-Risk"', 'name': 'Task'},
-                         color='risk_probability', color_continuous_scale=px.colors.sequential.Reds)
-            fig.update_layout(height=350, yaxis={'categoryorder':'total ascending'})
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("Not enough historical data (e.g., tasks marked 'At Risk') to train a predictive model yet.")
+            fig = px.bar(risk_predictions, x='risk_probability', y='name', orientation='h', title="Forecasted Risk for 'Not Started' Tasks", labels={'risk_probability': 'Probability of Being "At-Risk"', 'name': 'Task'}, color='risk_probability', color_continuous_scale=px.colors.sequential.Reds)
+            fig.update_layout(height=350, yaxis={'categoryorder':'total ascending'}); st.plotly_chart(fig, use_container_width=True)
+        else: st.info("Not enough historical data (e.g., tasks marked 'At Risk') to train a predictive model yet.")
 
 def render_compliance_guide_tab():
     """Renders the static educational content for the QE & Compliance Guide tab."""
