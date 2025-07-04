@@ -13,9 +13,10 @@ predictive machine learning content on Quality Engineering and regulatory compli
 import logging
 import os
 import sys
-import copy # Import the copy module for deep copying
+import copy
 from datetime import timedelta
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
+import hashlib # For deterministic seeding
 
 # --- Third-party Imports ---
 import numpy as np
@@ -33,31 +34,39 @@ try:
     project_root = os.path.dirname(os.path.dirname(current_file_path))
     if project_root not in sys.path:
         sys.path.insert(0, project_root)
-        logging.basicConfig(level=logging.INFO)
-        logging.info(f"Added project root to sys.path: {project_root}")
 except Exception as e:
-    st.error(f"Critical Error: Could not adjust system path. {e}")
-    logging.critical(f"Error adjusting system path: {e}", exc_info=True)
+    # Use st.warning for non-blocking path issues, critical error is too severe
+    st.warning(f"Could not adjust system path. Module imports may fail. Error: {e}")
 # --- End of Path Correction Block ---
 
-# --- Local Application Imports ---
-from dhf_dashboard.analytics.action_item_tracker import render_action_item_tracker
-from dhf_dashboard.analytics.traceability_matrix import render_traceability_matrix
-from dhf_dashboard.dhf_sections import (
-    design_changes, design_inputs, design_outputs, design_plan, design_reviews,
-    design_risk_management, design_transfer, design_validation,
-    design_verification, human_factors
-)
-from dhf_dashboard.utils.critical_path_utils import find_critical_path
-from dhf_dashboard.utils.plot_utils import (
-    _RISK_CONFIG,  # Import the canonical risk configuration
-    create_action_item_chart, create_progress_donut, create_risk_profile_chart)
-from dhf_dashboard.utils.session_state_manager import SessionStateManager
+# --- Local Application Imports (with error handling) ---
+try:
+    from dhf_dashboard.analytics.action_item_tracker import render_action_item_tracker
+    from dhf_dashboard.analytics.traceability_matrix import render_traceability_matrix
+    from dhf_dashboard.dhf_sections import (
+        design_changes, design_inputs, design_outputs, design_plan, design_reviews,
+        design_risk_management, design_transfer, design_validation,
+        design_verification, human_factors
+    )
+    from dhf_dashboard.utils.critical_path_utils import find_critical_path
+    from dhf_dashboard.utils.plot_utils import (
+        _RISK_CONFIG,
+        create_action_item_chart, create_progress_donut, create_risk_profile_chart)
+    from dhf_dashboard.utils.session_state_manager import SessionStateManager
+except ImportError as e:
+    st.error(f"Fatal Error: A required local module could not be imported: {e}. "
+             "Please ensure the application is run from the correct directory and all submodules exist.")
+    logging.critical(f"Fatal module import error: {e}", exc_info=True)
+    st.stop()
+
 
 # --- Setup Logging ---
+# Consolidated logging configuration to a single, definitive block.
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    # Force setup even if already configured by a library
+    force=True
 )
 logger = logging.getLogger(__name__)
 
@@ -89,12 +98,12 @@ def preprocess_task_data(tasks_data: List[Dict[str, Any]]) -> pd.DataFrame:
     if not tasks_data:
         logger.warning("Project management tasks data is empty during preprocessing.")
         return pd.DataFrame()
-    
+
     tasks_df = pd.DataFrame(tasks_data)
     tasks_df['start_date'] = pd.to_datetime(tasks_df['start_date'], errors='coerce')
     tasks_df['end_date'] = pd.to_datetime(tasks_df['end_date'], errors='coerce')
     tasks_df.dropna(subset=['start_date', 'end_date'], inplace=True)
-    
+
     if tasks_df.empty:
         return pd.DataFrame()
 
@@ -104,20 +113,26 @@ def preprocess_task_data(tasks_data: List[Dict[str, Any]]) -> pd.DataFrame:
     tasks_df['is_critical'] = tasks_df['id'].isin(critical_path_ids)
     tasks_df['line_color'] = np.where(tasks_df['is_critical'], 'red', '#FFFFFF')
     tasks_df['line_width'] = np.where(tasks_df['is_critical'], 4, 0)
-    tasks_df['display_text'] = tasks_df.apply(lambda r: f"<b>{r.get('name', '')}</b> ({r.get('completion_pct', 0)}%)", axis=1)
+
+    # OPTIMIZATION: Replaced slow .apply() with fast, vectorized string operations.
+    tasks_df['display_text'] = "<b>" + tasks_df['name'].fillna('').astype(str) + "</b> (" + \
+                               tasks_df['completion_pct'].fillna(0).astype(int).astype(str) + "%)"
     return tasks_df
 
 @st.cache_data
 def get_cached_df(data: List[Dict[str, Any]]) -> pd.DataFrame:
     """Generic function to cache the creation of DataFrames from lists of dicts."""
-    return pd.DataFrame(data) if data else pd.DataFrame()
+    if not data:
+        return pd.DataFrame()
+    return pd.DataFrame(data)
 
 
 # ==============================================================================
 # --- DASHBOARD DEEP-DIVE COMPONENT FUNCTIONS ---
 # ==============================================================================
 
-def render_dhf_completeness_panel(ssm: SessionStateManager, tasks_df: pd.DataFrame) -> None:
+# OPTIMIZATION: Added docs_by_phase parameter to avoid re-calculating in a loop.
+def render_dhf_completeness_panel(ssm: SessionStateManager, tasks_df: pd.DataFrame, docs_by_phase: Dict[str, pd.DataFrame]) -> None:
     """
     Renders the DHF completeness and gate readiness panel.
     Displays DHF phases as subheaders and a project timeline Gantt chart.
@@ -127,7 +142,6 @@ def render_dhf_completeness_panel(ssm: SessionStateManager, tasks_df: pd.DataFra
 
     try:
         tasks_raw = ssm.get_data("project_management", "tasks")
-        docs_df = get_cached_df(ssm.get_data("design_outputs", "documents"))
 
         if not tasks_raw:
             st.warning("No project management tasks found.")
@@ -137,12 +151,13 @@ def render_dhf_completeness_panel(ssm: SessionStateManager, tasks_df: pd.DataFra
             task_name = task.get('name', 'N/A')
             st.subheader(f"Phase: {task_name}")
             st.caption(f"Status: {task.get('status', 'N/A')} - {task.get('completion_pct', 0)}% Complete")
-            
+
             col1, col2 = st.columns([2, 1])
             with col1:
                 st.markdown("**Associated DHF Documents:**")
-                phase_docs = docs_df[docs_df['phase'] == task_name] if 'phase' in docs_df.columns else pd.DataFrame()
-                if not phase_docs.empty:
+                # OPTIMIZATION: Use the pre-grouped dictionary for an O(1) lookup.
+                phase_docs = docs_by_phase.get(task_name)
+                if phase_docs is not None and not phase_docs.empty:
                     st.dataframe(phase_docs[['id', 'title', 'status']], use_container_width=True, hide_index=True)
                 else:
                     st.caption("No documents for this phase yet.")
@@ -156,7 +171,7 @@ def render_dhf_completeness_panel(ssm: SessionStateManager, tasks_df: pd.DataFra
                 else:
                     st.caption("No sign-off data for this phase.")
             st.divider()
-        
+
         st.markdown("---")
         st.subheader("Project Phase Timeline (Gantt Chart)")
         if not tasks_df.empty:
@@ -258,6 +273,8 @@ def render_risk_and_fmea_dashboard(ssm: SessionStateManager) -> None:
             df = pd.DataFrame(fmea_data)
             df['RPN'] = df['S'] * df['O'] * df['D']
             
+            # Use deterministic seeding for jitter to prevent flickering UI
+            np.random.seed(0)
             df['S_jitter'] = df['S'] + np.random.uniform(-0.1, 0.1, len(df))
             df['O_jitter'] = df['O'] + np.random.uniform(-0.1, 0.1, len(df))
 
@@ -394,20 +411,21 @@ def render_audit_and_improvement_dashboard(ssm: SessionStateManager) -> None:
 # --- TAB RENDERING FUNCTIONS ---
 # ==============================================================================
 
-def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame):
+def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame, docs_by_phase: Dict[str, pd.DataFrame]):
     """
     Renders the main DHF Health Dashboard tab, enhanced for executive-level
     at-a-glance assessment and deep-dive analysis.
     """
     st.header("Executive Health Summary")
-    
+
     # --- Health Score & KHI Calculation ---
     schedule_score = 0
     if not tasks_df.empty:
-        today = pd.to_datetime('today'); overdue_in_progress = tasks_df[(tasks_df['status'] == 'In Progress') & (tasks_df['end_date'] < today)]
+        today = pd.Timestamp.now().floor('D') # Use a stable timestamp
+        overdue_in_progress = tasks_df[(tasks_df['status'] == 'In Progress') & (tasks_df['end_date'] < today)]
         total_in_progress = tasks_df[tasks_df['status'] == 'In Progress']
         schedule_score = (1 - (len(overdue_in_progress) / len(total_in_progress))) * 100 if not total_in_progress.empty else 100
-    
+
     hazards_df = get_cached_df(ssm.get_data("risk_management_file", "hazards")); risk_score = 0
     if not hazards_df.empty and all(c in hazards_df.columns for c in ['initial_S', 'initial_O', 'initial_D', 'final_S', 'final_O', 'final_D']):
         hazards_df['initial_rpn'] = hazards_df['initial_S'] * hazards_df['initial_O'] * hazards_df['initial_D']
@@ -415,11 +433,11 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
         initial_rpn_sum = hazards_df['initial_rpn'].sum(); final_rpn_sum = hazards_df['final_rpn'].sum()
         risk_reduction_pct = ((initial_rpn_sum - final_rpn_sum) / initial_rpn_sum) * 100 if initial_rpn_sum > 0 else 100
         risk_score = max(0, risk_reduction_pct)
-    
+
     reviews_data = ssm.get_data("design_reviews", "reviews")
     original_action_items = [item for r in reviews_data for item in r.get("action_items", [])]
     action_items_df = get_cached_df(original_action_items)
-    
+
     execution_score = 100
     if not action_items_df.empty:
         open_items = action_items_df[action_items_df['status'] != 'Completed']
@@ -466,28 +484,59 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
     st.divider()
     st.subheader("Action Item Health (Last 30 Days)")
     st.markdown("This chart shows the trend of open action items. A healthy project shows a downward or stable trend. A rising red area indicates a growing backlog of overdue work, which requires management attention.")
-    
-    if original_action_items:
-        df = pd.DataFrame(copy.deepcopy(original_action_items))
-        for review in reviews_data:
+
+    @st.cache_data
+    def generate_burndown_data(_reviews_data: Tuple, _action_items_data: Tuple):
+        """
+        Generates deterministic, cached burndown chart data from action items.
+        - review/action data is passed as tuples of frozensets to be hashable for caching.
+        - date simulation is seeded with item IDs for a stable, non-flickering UI.
+        """
+        if not _action_items_data:
+            return pd.DataFrame()
+
+        # Convert back to list of dicts for processing
+        action_items_list = [dict(fs) for fs in _action_items_data]
+        reviews_list = [dict(fs) for fs in _reviews_data]
+
+        df = pd.DataFrame(action_items_list)
+        for review in reviews_list:
             review_date = pd.to_datetime(review.get('date'))
             for item in review.get("action_items", []):
-                df.loc[df['id'] == item['id'], 'review_date'] = review_date
-        
-        df['due_date'] = pd.to_datetime(df['due_date'], errors='coerce')
-        df['created_date'] = pd.to_datetime(df.get('review_date'), errors='coerce') + pd.to_timedelta(np.random.randint(0, 2, len(df)), unit='d')
-        df['completion_date'] = pd.NaT 
+                # Ensure item is a dict for key access
+                item_dict = dict(item) if isinstance(item, frozenset) else item
+                if 'id' in item_dict:
+                    df.loc[df['id'] == item_dict['id'], 'review_date'] = review_date
 
+        df['due_date'] = pd.to_datetime(df['due_date'], errors='coerce')
+        df['created_date'] = pd.to_datetime(df.get('review_date'), errors='coerce')
+        df.dropna(subset=['created_date', 'due_date', 'id'], inplace=True)
+
+        # Add a small, deterministic offset to created_date
+        def get_deterministic_offset(item_id):
+            return int(hashlib.md5(str(item_id).encode()).hexdigest(), 16) % 3
+        df['created_date'] += df['id'].apply(lambda x: pd.to_timedelta(get_deterministic_offset(x), unit='d'))
+
+        df['completion_date'] = pd.NaT
         completed_mask = df['status'] == 'Completed'
         if completed_mask.any():
-            completed_items = df[completed_mask].copy()
+            completed_items = df.loc[completed_mask].copy()
             lifespan = (completed_items['due_date'] - completed_items['created_date']).dt.days.fillna(1).astype(int)
             lifespan = lifespan.apply(lambda d: max(1, d))
-            completion_days = [np.random.randint(1, d + 1) for d in lifespan]
+            
+            # BUG FIX: Use a deterministic "random" number for completion date simulation
+            def get_deterministic_completion(row):
+                seed = int(hashlib.md5(str(row['id']).encode()).hexdigest(), 16)
+                np.random.seed(seed)
+                return np.random.randint(1, row['lifespan'] + 1)
+
+            completed_items['lifespan'] = lifespan
+            completion_days = completed_items.apply(get_deterministic_completion, axis=1)
             df.loc[completed_mask, 'completion_date'] = completed_items['created_date'] + pd.to_timedelta(completion_days, unit='d')
 
-        today = pd.to_datetime('today'); date_range = pd.date_range(end=today, periods=30, freq='D')
-        
+        today = pd.Timestamp.now().floor('D')
+        date_range = pd.date_range(end=today, periods=30, freq='D')
+
         daily_counts = []
         for day in date_range:
             created_mask = df['created_date'] <= day
@@ -500,22 +549,36 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
             else:
                 overdue_count = 0; ontime_count = 0
             daily_counts.append({'date': day, 'Overdue': overdue_count, 'On-Time': ontime_count})
-        
-        burndown_df = pd.DataFrame(daily_counts)
-        
-        fig = px.area(burndown_df, x='date', y=['On-Time', 'Overdue'],
-                      color_discrete_map={'On-Time': 'seagreen', 'Overdue': 'crimson'},
-                      title="Trend of Open Action Items by Status",
-                      labels={'value': 'Number of Open Items', 'date': 'Date', 'variable': 'Status'})
-        fig.update_layout(height=350, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-        st.plotly_chart(fig, use_container_width=True)
+
+        return pd.DataFrame(daily_counts)
+
+    if original_action_items:
+        # Convert data to hashable types for caching
+        immutable_actions = tuple(frozenset(d.items()) for d in original_action_items)
+        # Handle nested lists in reviews_data by making them hashable tuples
+        immutable_reviews = tuple(frozenset(
+            (k, tuple(frozenset(i.items()) for i in v) if isinstance(v, list) else v)
+            for k, v in r.items()
+        ) for r in reviews_data)
+
+        burndown_df = generate_burndown_data(immutable_reviews, immutable_actions)
+
+        if not burndown_df.empty:
+            fig = px.area(burndown_df, x='date', y=['On-Time', 'Overdue'],
+                          color_discrete_map={'On-Time': 'seagreen', 'Overdue': 'crimson'},
+                          title="Trend of Open Action Items by Status",
+                          labels={'value': 'Number of Open Items', 'date': 'Date', 'variable': 'Status'})
+            fig.update_layout(height=350, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+             st.caption("No action item data to generate a burn-down chart.")
     else:
         st.caption("No action item data to generate a burn-down chart.")
     
     st.divider()
     st.header("Deep Dives")
     with st.expander("Expand to see Phase Gate Readiness & Timeline Details"):
-        render_dhf_completeness_panel(ssm, tasks_df)
+        render_dhf_completeness_panel(ssm, tasks_df, docs_by_phase)
     with st.expander("Expand to see Risk & FMEA Details"):
         render_risk_and_fmea_dashboard(ssm)
     with st.expander("Expand to see QbD and Manufacturing Readiness Details"):
@@ -544,19 +607,34 @@ def render_advanced_analytics_tab(ssm: SessionStateManager):
         st.subheader("Project Timeline and Task Editor")
         st.warning("Directly edit project timelines, statuses, and dependencies. Changes are saved automatically.", icon="⚠️")
         try:
-            tasks_df_to_edit = pd.DataFrame(ssm.get_data("project_management", "tasks"))
-            tasks_df_to_edit['start_date'] = pd.to_datetime(tasks_df_to_edit['start_date'], errors='coerce'); tasks_df_to_edit['end_date'] = pd.to_datetime(tasks_df_to_edit['end_date'], errors='coerce')
+            tasks_data_to_edit = ssm.get_data("project_management", "tasks")
+            if not tasks_data_to_edit:
+                st.info("No tasks to display or edit.")
+                return
+
+            tasks_df_to_edit = pd.DataFrame(tasks_data_to_edit)
+            tasks_df_to_edit['start_date'] = pd.to_datetime(tasks_df_to_edit['start_date'], errors='coerce')
+            tasks_df_to_edit['end_date'] = pd.to_datetime(tasks_df_to_edit['end_date'], errors='coerce')
+            
             original_df = tasks_df_to_edit.copy()
             edited_df = st.data_editor(
                 tasks_df_to_edit, key="main_task_editor", num_rows="dynamic", use_container_width=True,
                 column_config={"start_date": st.column_config.DateColumn("Start Date", format="YYYY-MM-DD", required=True), "end_date": st.column_config.DateColumn("End Date", format="YYYY-MM-DD", required=True)})
+            
             if not original_df.equals(edited_df):
                 df_to_save = edited_df.copy()
-                df_to_save['start_date'] = df_to_save['start_date'].dt.strftime('%Y-%m-%d').replace({pd.NaT: None})
-                df_to_save['end_date'] = df_to_save['end_date'].dt.strftime('%Y-%m-%d').replace({pd.NaT: None})
+                df_to_save['start_date'] = pd.to_datetime(df_to_save['start_date']).dt.strftime('%Y-%m-%d')
+                df_to_save['end_date'] = pd.to_datetime(df_to_save['end_date']).dt.strftime('%Y-%m-%d')
+                
+                # Replace NaT representations with None for JSON compatibility
+                df_to_save = df_to_save.replace({pd.NaT: None})
+
                 ssm.update_data(df_to_save.to_dict('records'), "project_management", "tasks")
-                st.toast("Project tasks updated! Rerunning...", icon="✅"); st.rerun()
-        except Exception as e: st.error("Could not load the Project Task Editor."); logger.error(f"Error in task editor: {e}", exc_info=True)
+                st.toast("Project tasks updated! Rerunning...", icon="✅")
+                st.rerun()
+        except Exception as e: 
+            st.error("Could not load the Project Task Editor.")
+            logger.error(f"Error in task editor: {e}", exc_info=True)
 
 def render_statistical_tools_tab(ssm: SessionStateManager):
     """Renders the Statistical Workbench tab with professionally enhanced tools."""
@@ -565,11 +643,17 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
     try:
         import statsmodels.api as sm
         from statsmodels.formula.api import ols
-        from scipy.stats import shapiro, mannwhitneyu
+        from scipy.stats import shapiro, mannwhitneyu, chi2_contingency, pearsonr
     except ImportError:
         st.error("This tab requires `statsmodels` and `scipy`. Please install them (`pip install statsmodels scipy`) to enable statistical tools.", icon="🚨"); return
-    tool_tabs = st.tabs(["Process Control (SPC)", "Hypothesis Testing (A/B Test)", "Pareto Analysis (FMEA)", "Design of Experiments (DOE)"])
-    with tool_tabs[0]:
+    
+    # --- EXTENDED: Added four new tools to the tab list ---
+    tool_tabs = st.tabs([
+        "Process Control (SPC)", "Hypothesis Testing (A/B Test)", "Pareto Analysis (FMEA)", "Design of Experiments (DOE)",
+        "Gauge R&R (MSA)", "Chi-Squared Test", "Correlation Analysis", "Equivalence Test (TOST)"
+    ])
+
+    with tool_tabs[0]: # SPC
         st.subheader("Statistical Process Control (SPC) with Rule Checking")
         st.markdown("Monitor process stability by distinguishing natural variation from signals that require investigation.")
         with st.expander("The 'Why' and the 'How'"):
@@ -603,7 +687,8 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
                 fig.update_layout(title="SPC Chart for Pill Casing Diameter", yaxis_title="Diameter (mm)"); st.plotly_chart(fig, use_container_width=True)
             else: st.warning("SPC data is incomplete or missing.")
         except Exception as e: st.error("Could not render SPC chart."); logger.error(f"Error in SPC tool: {e}", exc_info=True)
-    with tool_tabs[1]:
+    
+    with tool_tabs[1]: # Hypothesis Testing
         st.subheader("Hypothesis Testing with Assumption Checks")
         st.markdown("Rigorously determine if a statistically significant difference exists between two groups (e.g., Supplier A vs. Supplier B).")
         with st.expander("The 'Why' and the 'How'"):
@@ -633,7 +718,8 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
                     fig = px.box(df_ht, x='line', y='value', title="Distribution Comparison", points="all", labels={'value': 'Seal Strength'}); st.plotly_chart(fig, use_container_width=True)
             else: st.warning("Hypothesis testing data is incomplete or missing.")
         except Exception as e: st.error("Could not perform Hypothesis Test."); logger.error(f"Error in Hypothesis Testing tool: {e}", exc_info=True)
-    with tool_tabs[2]:
+    
+    with tool_tabs[2]: # Pareto Analysis
         st.subheader("Pareto Analysis of FMEA Risk")
         st.markdown("Applies the 80/20 rule to FMEA data to identify the 'vital few' failure modes that drive the majority of risk, enabling focused mitigation efforts.")
         with st.expander("The 'Why' and the 'How'"):
@@ -643,7 +729,7 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
             st.markdown("We combine dFMEA and pFMEA data, calculate `RPN = S × O × D` for each, and sort them in descending order. The bar chart shows the RPN for each failure mode, while the line shows the cumulative percentage of total RPN. **Action is focused on the items on the left** until the cumulative line begins to flatten, typically around the 80% mark.")
         try:
             fmea_df = pd.concat([get_cached_df(ssm.get_data("risk_management_file", "dfmea")), get_cached_df(ssm.get_data("risk_management_file", "pfmea"))], ignore_index=True)
-            if not fmea_df.empty:
+            if not fmea_df.empty and all(c in fmea_df.columns for c in ['S', 'O', 'D']):
                 fmea_df['RPN'] = fmea_df['S'] * fmea_df['O'] * fmea_df['D']; fmea_df = fmea_df.sort_values('RPN', ascending=False)
                 fmea_df['cumulative_pct'] = (fmea_df['RPN'].cumsum() / fmea_df['RPN'].sum()) * 100
                 fig = go.Figure(); fig.add_trace(go.Bar(x=fmea_df['failure_mode'], y=fmea_df['RPN'], name='RPN', marker_color='#1f77b4'))
@@ -652,7 +738,8 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
                 st.plotly_chart(fig, use_container_width=True)
             else: st.warning("No FMEA data available for Pareto analysis.")
         except Exception as e: st.error("Could not generate Pareto chart."); logger.error(f"Error in Pareto Analysis tool: {e}", exc_info=True)
-    with tool_tabs[3]:
+    
+    with tool_tabs[3]: # Design of Experiments
         st.subheader("Design of Experiments (DOE) with ANOVA")
         st.markdown("Efficiently determine which process inputs (**factors**) and their interactions significantly impact a key output (**response**).")
         with st.expander("The 'Why' and the 'How'"):
@@ -686,6 +773,245 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
             else: st.warning("DOE data is not available.")
         except Exception as e: st.error("Could not generate DOE plots."); logger.error(f"Error in DOE Analysis tool: {e}", exc_info=True)
 
+    # --- NEW TOOL 1: GAUGE R&R ---
+    with tool_tabs[4]:
+        st.subheader("Measurement System Analysis (Gauge R&R)")
+        st.markdown("Determine if your measurement system is adequate by quantifying its variability relative to the total process variation.")
+        with st.expander("The 'Why', 'How', and 'So What?'"):
+            st.markdown("#### Purpose: Can You Trust Your Measurement?")
+            st.markdown("Before you can improve a process, you must be able to measure it accurately and precisely. A Gauge R&R study answers a critical question: **Is the variation I see in my data coming from the product, or from my measurement system?** If the measurement system is a large source of variation, you may misinterpret good parts as bad (or vice-versa) and waste resources trying to 'fix' a process that is actually fine.")
+            st.markdown("#### The Math Basis: Analysis of Variance (ANOVA)")
+            st.markdown("We use ANOVA to partition the total observed variation into its sources: variation from the **Parts** (the real process variation we want to see), variation from the **Operators** (reproducibility), and variation from the **Gauge** itself (repeatability).")
+            st.markdown("#### The Procedure: Study Execution & Analysis")
+            st.markdown("1.  A study is conducted where multiple operators measure multiple (randomly selected) parts multiple times.\n2.  The data is fed into an ANOVA model.\n3.  From the ANOVA table's Mean Squares (MS), we calculate the variance components for each source.\n4.  Key metrics are calculated: **%Contribution**, **%Study Variation**, and the **Number of Distinct Categories (ndc)**.")
+            st.markdown("#### Significance of the Results: Go / No-Go Decision")
+            st.markdown("""
+            - **%Contribution:** The percentage of total variance caused by the measurement system.
+              - **< 1%:** Excellent.
+              - **1% - 9%:** Acceptable.
+              - **> 9%:** Unacceptable. The gauge needs improvement.
+            - **Number of Distinct Categories (ndc):** How many distinct groups of parts the system can reliably distinguish.
+              - **`ndc` < 2:** Useless. Cannot even tell parts apart.
+              - **2 <= `ndc` < 5:** Marginally acceptable, may need improvement.
+              - **`ndc` >= 5:** Acceptable. The system is effective for process control.
+            """)
+        try:
+            msa_data_list = ssm.get_data("quality_system", "msa_data")
+            if msa_data_list and all(k in msa_data_list[0] for k in ['part', 'operator', 'measurement']):
+                df = pd.DataFrame(msa_data_list)
+                
+                # ANOVA model
+                model = ols('measurement ~ C(part) + C(operator) + C(part):C(operator)', data=df).fit()
+                anova_table = sm.stats.anova_lm(model, typ=2)
+                
+                # Calculate Variance Components
+                ms_operator = anova_table.loc['C(operator)', 'mean_sq']
+                ms_part = anova_table.loc['C(part)', 'mean_sq']
+                ms_interact = anova_table.loc['C(part):C(operator)', 'mean_sq']
+                ms_error = anova_table.loc['Residual', 'mean_sq'] # Repeatability
+                n_parts, n_ops = df['part'].nunique(), df['operator'].nunique()
+                n_reps = len(df) / (n_parts * n_ops) if (n_parts * n_ops) > 0 else 0
+
+                var_repeat = ms_error
+                var_reprod = max(0, (ms_operator - ms_interact) / (n_parts * n_reps))
+                var_interact = max(0, (ms_interact - ms_error) / n_reps)
+                var_op_total = var_reprod + var_interact
+                var_gaugeRR = var_repeat + var_op_total
+                var_part = max(0, (ms_part - ms_interact) / (n_ops * n_reps))
+                var_total = var_gaugeRR + var_part
+
+                if var_total > 1e-9: # Check for non-zero total variance
+                    # Calculate Metrics
+                    contrib_gauge = (var_gaugeRR / var_total) * 100
+                    contrib_part = (var_part / var_total) * 100
+                    ndc = int(1.41 * (np.sqrt(var_part) / np.sqrt(var_gaugeRR))) if var_gaugeRR > 1e-9 else float('inf')
+
+                    st.markdown("**Gauge R&R Results**")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Gauge R&R % Contribution", f"{contrib_gauge:.2f}%", help="Percentage of total variation from the measurement system. <9% is acceptable.")
+                        st.metric("Number of Distinct Categories (ndc)", f"{ndc}", help="How many groups the system can distinguish. >=5 is acceptable.")
+                        if contrib_gauge > 9 or ndc < 5:
+                            st.error("**Conclusion: Measurement System is UNACCEPTABLE.**", icon="🚨")
+                        else:
+                            st.success("**Conclusion: Measurement System is ACCEPTABLE.**", icon="✅")
+                    with col2:
+                        var_df = pd.DataFrame({
+                            'Source': ['Gauge R&R', 'Part-to-Part'],
+                            'Contribution (%)': [contrib_gauge, contrib_part]
+                        })
+                        fig = px.bar(var_df, x='Source', y='Contribution (%)', title="Variance Contribution", text_auto='.2f', color='Source', color_discrete_map={'Gauge R&R': 'crimson', 'Part-to-Part': 'seagreen'})
+                        fig.update_layout(showlegend=False)
+                        st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.warning("Could not calculate variance components. Check data for variability.")
+            else:
+                st.warning("Gauge R&R data (`msa_data`) is missing or incomplete.")
+        except Exception as e:
+            st.error(f"Could not perform Gauge R&R Analysis. Error: {e}")
+            logger.error(f"Error in Gauge R&R tool: {e}", exc_info=True)
+
+    # --- NEW TOOL 2: CHI-SQUARED TEST ---
+    with tool_tabs[5]:
+        st.subheader("Chi-Squared Test of Independence")
+        st.markdown("Test for a statistically significant association between two categorical variables (e.g., Supplier vs. Defect Type).")
+        with st.expander("The 'Why', 'How', and 'So What?'"):
+            st.markdown("#### Purpose: Finding Relationships in Categorical Data")
+            st.markdown("While t-tests compare averages of continuous data, the Chi-Squared (χ²) test works with counts of categorical data. It helps answer questions like: *'Is one production line producing a different mix of defect types than another?'* or *'Is there a relationship between the shift and the pass/fail outcome?'* It's a key tool for root cause analysis.")
+            st.markdown("#### The Math Basis: Observed vs. Expected")
+            st.markdown("The test is based on the **Chi-Squared (χ²) statistic**. It works by:\n1.  Creating a **contingency table** of the observed counts for your two variables.\n2.  Calculating the counts you would **expect** to see in each cell *if there were no relationship* between the variables.\n3.  The χ² statistic summarizes the difference between the observed and expected counts across all cells. A large χ² value suggests the observed data is very different from what you'd expect by chance.")
+            st.markdown("#### The Procedure: From Data to P-Value")
+            st.markdown("1.  Raw data (e.g., a list of inspection results with supplier and outcome) is aggregated into a contingency table.\n2.  The `scipy.stats.chi2_contingency` function calculates the χ² statistic, the p-value, and the degrees of freedom (df).\n3.  The result is interpreted.")
+            st.markdown("#### Significance of the Results: Is the Association Real?")
+            st.markdown("The **p-value** is the key output. It tells you the probability of observing an association as strong as the one in your data, assuming the variables are actually independent.\n- **`p < 0.05`:** You **reject the null hypothesis**. There is a statistically significant association between the variables. This does *not* prove causation, but it's a strong signal to investigate further.\n- **`p >= 0.05`:** You **fail to reject the null hypothesis**. You do not have enough evidence to conclude that an association exists.")
+        try:
+            chi_data = ssm.get_data("quality_system", "chi_squared_data")
+            if chi_data and all(k in chi_data[0] for k in ['supplier', 'outcome']):
+                df = pd.DataFrame(chi_data)
+                contingency_table = pd.crosstab(df['supplier'], df['outcome'])
+                
+                st.markdown("**Contingency Table (Observed Counts)**")
+                st.dataframe(contingency_table)
+
+                if contingency_table.size > 1:
+                    chi2, p, dof, expected = chi2_contingency(contingency_table)
+                    
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Chi-Squared Statistic", f"{chi2:.3f}")
+                        st.metric("P-value", f"{p:.4f}")
+                        if p < 0.05:
+                            st.success("**Conclusion:** A statistically significant association exists between Supplier and Outcome (p < 0.05).", icon="✅")
+                        else:
+                            st.warning("**Conclusion:** No significant association detected (p >= 0.05).", icon="⚠️")
+                    with col2:
+                        # Normalize data for better visualization
+                        ct_percent = contingency_table.div(contingency_table.sum(axis=1), axis=0) * 100
+                        fig = px.imshow(ct_percent, text_auto='.1f', aspect="auto",
+                                        title="Heatmap of Outcomes by Supplier (%)",
+                                        labels=dict(x="Outcome", y="Supplier", color="% of Row Total"),
+                                        color_continuous_scale=px.colors.sequential.Greens)
+                        st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.warning("Not enough data to form a valid contingency table.")
+            else:
+                st.warning("Chi-Squared data (`chi_squared_data`) is missing or incomplete.")
+        except Exception as e:
+            st.error(f"Could not perform Chi-Squared Test. Error: {e}")
+            logger.error(f"Error in Chi-Squared tool: {e}", exc_info=True)
+
+    # --- NEW TOOL 3: CORRELATION ANALYSIS ---
+    with tool_tabs[6]:
+        st.subheader("Correlation Analysis")
+        st.markdown("Explore the strength and direction of the linear relationship between two continuous variables.")
+        with st.expander("The 'Why', 'How', and 'So What?'"):
+            st.markdown("#### Purpose: Quantifying Relationships")
+            st.markdown("Correlation analysis is a quick and powerful way to see if two variables move together. It's often a first step before more complex modeling like DOE or regression. It helps answer questions like: *'As we increase process temperature, does seal strength also increase?'* or *'Is there a relationship between material hardness and component lifetime?'*")
+            st.markdown("#### The Math Basis: Pearson's Correlation Coefficient (r)")
+            st.markdown("The analysis centers on **Pearson's r**, which measures the strength and direction of a *linear* relationship. It ranges from **-1 to +1**:\n- **+1:** Perfect positive linear correlation (as X increases, Y increases).\n- **-1:** Perfect negative linear correlation (as X increases, Y decreases).\n- **0:** No linear correlation. **Important:** A correlation of 0 does not mean there is no relationship, only that there is no *linear* one (e.g., a U-shaped relationship could have r=0).")
+            st.markdown("#### The Procedure: Visualize and Calculate")
+            st.markdown("1.  Two columns of continuous data are selected.\n2.  A **scatter plot** is generated to visually inspect the relationship. This is the most important step!\n3.  The `scipy.stats.pearsonr` function is used to calculate the Pearson's r coefficient and its p-value.")
+            st.markdown("#### Significance of the Results: Strength and Confidence")
+            st.markdown("You get two key outputs:\n- **Correlation Coefficient (r):** The strength of the relationship. General rules of thumb: |r| > 0.7 is strong, 0.4 < |r| < 0.7 is moderate, |r| < 0.4 is weak.\n- **P-value:** The confidence in the result. It tests the hypothesis that r=0. If **`p < 0.05`**, you can be confident that the relationship you see is not just due to random chance. **Crucially, statistical significance does not equal practical importance.** A tiny but very consistent correlation in a huge dataset can be statistically significant but practically useless.")
+        try:
+            corr_data_dict = ssm.get_data("quality_system", "correlation_data")
+            if corr_data_dict and all(k in corr_data_dict for k in ['temperature', 'strength']):
+                df = pd.DataFrame(corr_data_dict)
+                if len(df) > 2:
+                    r, p = pearsonr(df['temperature'], df['strength'])
+
+                    fig = px.scatter(df, x='temperature', y='strength',
+                                     title=f"Correlation Analysis (r = {r:.3f})",
+                                     trendline="ols", trendline_color_override="red",
+                                     labels={'temperature': 'Process Temperature (°C)', 'strength': 'Seal Strength (N)'})
+                    st.plotly_chart(fig, use_container_width=True)
+
+                    st.metric("Pearson Correlation (r)", f"{r:.4f}")
+                    st.metric("P-value", f"{p:.4f}")
+
+                    if p < 0.05:
+                        st.success(f"**Conclusion:** A statistically significant {'positive' if r > 0 else 'negative'} correlation exists.", icon="✅")
+                    else:
+                        st.warning("**Conclusion:** The observed correlation is not statistically significant.", icon="⚠️")
+                else:
+                    st.warning("Need at least 3 data points for correlation analysis.")
+            else:
+                st.warning("Correlation data (`correlation_data`) is missing or incomplete.")
+        except Exception as e:
+            st.error(f"Could not perform Correlation Analysis. Error: {e}")
+            logger.error(f"Error in Correlation tool: {e}", exc_info=True)
+
+    # --- NEW TOOL 4: EQUIVALENCE TESTING (TOST) ---
+    with tool_tabs[7]:
+        st.subheader("Equivalence Testing (TOST)")
+        st.markdown("Rigorously prove that two groups are 'practically the same' within a pre-defined margin of equivalence.")
+        with st.expander("The 'Why', 'How', and 'So What?'"):
+            st.markdown("#### Purpose: Proving Sameness, Not Difference")
+            st.markdown("Standard hypothesis tests (like the t-test) are designed to find a difference. Failing to find a difference is *not* the same as proving equivalence. **Equivalence Testing** is the correct statistical method when you need to demonstrate that a change (e.g., a new supplier, a modified process) results in a product that is practically the same as the old one. This is critical for regulatory submissions and change control justifications.")
+            st.markdown("#### The Math Basis: Two One-Sided Tests (TOST)")
+            st.markdown("Instead of one null hypothesis (`mean_A = mean_B`), TOST uses two. We define an **equivalence interval** `[-δ, +δ]` around zero. We must prove that the true difference between the means is *not* outside this interval. We test two null hypotheses:\n1.  `H₀₁: difference <= -δ` (The new process is worse)\n2.  `H₀₂: difference >= +δ` (The new process is better... or different in the other direction)\nWe must **reject both** of these null hypotheses to claim equivalence.")
+            st.markdown("#### The Procedure: Define, Test, Conclude")
+            st.markdown("1.  The engineer defines a **practically significant difference (delta, δ)**. This is the most critical step and must be based on scientific or engineering knowledge.\n2.  Two separate one-sided t-tests are performed against the lower and upper equivalence bounds.\n3.  The final p-value for the TOST is the **maximum** of the p-values from the two individual tests.\n4.  The 90% confidence interval of the difference is calculated and compared to the equivalence interval.")
+            st.markdown("#### Significance of the Results: A Stronger Claim")
+            st.markdown("- **`p < 0.05`:** You **reject both nulls and claim equivalence**. The data provides strong evidence that the true difference between the groups is within your defined equivalence margin `[-δ, +δ]`.\n- **`p >= 0.05`:** You **cannot claim equivalence**. The difference might be outside your acceptable range, or you don't have enough data to be sure.\nVisually, you have equivalence if the **90% confidence interval** of the difference lies entirely **within** the equivalence bounds.")
+        try:
+            ht_data = ssm.get_data("quality_system", "hypothesis_testing_data")
+            if ht_data and all(k in ht_data for k in ['line_a', 'line_b']):
+                line_a, line_b = np.array(ht_data['line_a']), np.array(ht_data['line_b'])
+                
+                st.markdown("**1. Define Equivalence Margin**")
+                delta = st.number_input("Enter the equivalence margin (delta, δ):", min_value=0.0, value=0.5, step=0.1, help="The maximum difference between the groups that you would still consider 'practically the same'.")
+
+                # Perform TOST
+                n1, n2 = len(line_a), len(line_b)
+                mean_diff = np.mean(line_a) - np.mean(line_b)
+                s1, s2 = np.var(line_a, ddof=1), np.var(line_b, ddof=1)
+                pooled_sd = np.sqrt(((n1 - 1) * s1 + (n2 - 1) * s2) / (n1 + n2 - 2))
+                se_diff = pooled_sd * np.sqrt(1/n1 + 1/n2) if (n1 > 0 and n2 > 0) else 0
+
+                if se_diff > 0:
+                    t_stat_lower = (mean_diff - (-delta)) / se_diff
+                    t_stat_upper = (mean_diff - delta) / se_diff
+                    dof = n1 + n2 - 2
+                    
+                    p_lower = stats.t.sf(t_stat_lower, df=dof) # Survival function for one-sided test
+                    p_upper = stats.t.cdf(t_stat_upper, df=dof)
+                    tost_p_value = max(p_lower, p_upper)
+                    
+                    # 90% Confidence Interval for the difference
+                    ci_90 = stats.t.interval(0.90, df=dof, loc=mean_diff, scale=se_diff)
+
+                    st.markdown("**2. Test Results**")
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Difference in Means (A - B)", f"{mean_diff:.3f}")
+                        st.metric("TOST P-Value", f"{tost_p_value:.4f}")
+                        st.markdown(f"**90% Confidence Interval:** `[{ci_90[0]:.3f}, {ci_90[1]:.3f}]`")
+                    with col2:
+                        st.markdown("**3. Conclusion**")
+                        is_equivalent = tost_p_value < 0.05
+                        if is_equivalent:
+                            st.success(f"**Conclusion: The groups ARE statistically equivalent** within a margin of ±{delta}.", icon="✅")
+                        else:
+                            st.error(f"**Conclusion: Equivalence CANNOT be claimed** within a margin of ±{delta}.", icon="🚨")
+
+                    # Visualization
+                    fig = go.Figure()
+                    fig.add_shape(type="rect", x0=-delta, y0=0, x1=delta, y1=1, line=dict(width=0), fillcolor="rgba(44, 160, 44, 0.2)", layer="below", name="Equivalence Zone")
+                    fig.add_trace(go.Scatter(x=[ci_90[0], ci_90[1]], y=[0.5, 0.5], mode="lines", line=dict(color="blue", width=4), name="90% CI of Difference"))
+                    fig.add_trace(go.Scatter(x=[mean_diff], y=[0.5], mode="markers", marker=dict(color="blue", size=12, symbol="x"), name="Observed Difference"))
+                    fig.update_layout(title="Equivalence Test Visualization", xaxis_title="Difference Between Groups", yaxis=dict(showticklabels=False, range=[0,1]),
+                                      shapes=[dict(type='line', x0=0, y0=0, x1=0, y1=1, line=dict(color='black', dash='dash'))])
+                    st.plotly_chart(fig, use_container_width=True)
+                else:
+                    st.warning("Could not perform test. Check for zero variance or empty data groups.")
+            else:
+                st.warning("Equivalence testing data (`hypothesis_testing_data`) is incomplete or missing.")
+        except Exception as e:
+            st.error(f"Could not perform Equivalence Test. Error: {e}")
+            logger.error(f"Error in TOST tool: {e}", exc_info=True)
+
+
 def render_machine_learning_lab_tab(ssm: SessionStateManager):
     """Renders the Machine Learning Lab tab with professionally enhanced, interactive visualizations."""
     st.header("🤖 Machine Learning Lab")
@@ -714,7 +1040,7 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
             st.markdown("""We train a **Random Forest Classifier** and then use **SHAP (SHapley Additive exPlanations)** to interpret its predictions.\n- **Feature Importance Plot:** This bar chart shows the average impact of each feature on the model's prediction. Higher values mean more importance.\n- **SHAP Summary Plot:** This is a major upgrade that shows not only *which* features are important but also *how* their values impact the prediction. Red dots indicate high feature values, blue dots indicate low values. Dots to the right push the model towards predicting "Fail", while dots to the left push towards "Pass".\n- **Enhanced Confusion Matrix:** Our new matrix is a professional heatmap that includes clear labels and percentages for intuitive performance assessment.""")
 
         @st.cache_data
-        def generate_and_train_quality_model():
+        def get_quality_model_and_data():
             np.random.seed(42); n_samples = 500
             data = {'temperature': np.random.normal(90, 5, n_samples), 'pressure': np.random.normal(300, 20, n_samples), 'viscosity': np.random.normal(50, 3, n_samples)}
             df = pd.DataFrame(data)
@@ -723,9 +1049,16 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
             X = df[['temperature', 'pressure', 'viscosity']]; y = df['status_code']
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
             model = RandomForestClassifier(n_estimators=100, random_state=42); model.fit(X_train, y_train)
-            return model, X_train, X_test, y_train, y_test
-        
-        model, X_train, X_test, y_train, y_test = generate_and_train_quality_model()
+            return model, X_test, y_test
+
+        @st.cache_data
+        def get_shap_explanation(_model, _X_test):
+            explainer = shap.TreeExplainer(_model)
+            shap_explanation = explainer(_X_test)
+            return shap_explanation
+
+        model, X_test, y_test = get_quality_model_and_data()
+        shap_explanation = get_shap_explanation(model, X_test)
         
         col1, col2 = st.columns(2)
         with col1:
@@ -738,37 +1071,34 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
             labels = [["True Negative", "False Positive"], ["False Negative", "True Positive"]]
             annotations = [[f"{labels[i][j]}<br>{cm[i][j]}<br>({cm_percent[i][j]:.2%})" for j in range(2)] for i in range(2)]
 
-            fig = go.Figure(data=go.Heatmap(
+            fig_cm = go.Figure(data=go.Heatmap(
                    z=cm, x=['Predicted Pass', 'Predicted Fail'], y=['Actual Pass', 'Actual Fail'],
                    hoverongaps=False, colorscale='Blues', showscale=False,
                    text=annotations, texttemplate="%{text}"))
-            fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10), title_x=0.5, title_text="<b>Confusion Matrix</b>")
-            st.plotly_chart(fig, use_container_width=True)
+            fig_cm.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10), title_x=0.5, title_text="<b>Confusion Matrix</b>")
+            st.plotly_chart(fig_cm, use_container_width=True)
 
         with col2:
             st.markdown("**Overall Feature Importance**")
             st.caption("Which factors have the largest average impact?")
-            explainer = shap.TreeExplainer(model)
-            
-            # Use the modern explainer API to get a structured Explanation object
-            shap_explanation = explainer(X_test)
-            
             # Select the SHAP values for the "Fail" class (class 1)
             shap_values_fail = shap_explanation[:, :, 1]
             
-            # Create the bar plot using the robust Explanation object
-            fig, ax = plt.subplots(figsize=(6, 4))
-            shap.summary_plot(shap_values_fail, X_test, plot_type="bar", show=False)
-            st.pyplot(fig, use_container_width=True)
+            fig_bar, ax_bar = plt.subplots(figsize=(6, 4))
+            shap.summary_plot(shap_values_fail, X_test, plot_type="bar", show=False, axis=ax_bar)
+            plt.tight_layout()
+            st.pyplot(fig_bar, clear_figure=True)
 
         st.subheader("Deep Dive: How Feature Values Drive Failure")
         st.markdown("The plot below shows each individual prediction from the test set. Red dots are high feature values, blue are low. For `temperature`, you can see high (red) values push the prediction towards failure (positive SHAP value), while low (blue) values push it towards passing.")
         
-        fig_shap_summary, ax_shap_summary = plt.subplots()
         # Use the same robust Explanation object for the beeswarm plot
-        shap.summary_plot(shap_values_fail, X_test, show=False, plot_size=(10, 4))
+        shap_values_fail = shap_explanation[:, :, 1]
+        fig_shap_summary, ax_shap_summary = plt.subplots()
+        shap.summary_plot(shap_values_fail, X_test, show=False, plot_size=None, axis=ax_shap_summary)
         ax_shap_summary.set_xlabel("SHAP value (impact on model output towards 'Fail')")
-        st.pyplot(fig_shap_summary)
+        plt.tight_layout()
+        st.pyplot(fig_shap_summary, clear_figure=True)
 
     with ml_tabs[1]:
         st.subheader("Predictive Project Risk: Interactive Analysis")
@@ -781,9 +1111,11 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
             st.markdown("""1.  A **Logistic Regression** model is trained on historical tasks to learn the relationship between task features and the likelihood of delay.\n2.  The model calculates a risk probability for all 'Not Started' tasks.\n3.  **When you select a task**, we analyze its specific features (e.g., its `duration_days`) and multiply them by the model's learned coefficients (`model.coef_`). This gives us the **Risk Contribution** of each factor.\n4.  A bar chart visualizes these contributions, showing you exactly which factors are driving the risk for the selected task.""")
 
         @st.cache_data
-        def train_and_predict_risk(tasks: List[Dict]):
-            df = pd.DataFrame(tasks); df['start_date'] = pd.to_datetime(df['start_date']); df['end_date'] = pd.to_datetime(df['end_date'])
-            df['duration_days'] = (df['end_date'] - df['start_date']).dt.days; df['num_dependencies'] = df['dependencies'].apply(lambda x: len(x.split(',')) if x else 0)
+        def train_and_predict_risk(tasks: Tuple):
+            df = pd.DataFrame([dict(fs) for fs in tasks])
+            df['start_date'] = pd.to_datetime(df['start_date']); df['end_date'] = pd.to_datetime(df['end_date'])
+            df['duration_days'] = (df['end_date'] - df['start_date']).dt.days
+            df['num_dependencies'] = df['dependencies'].apply(lambda x: len(x.split(',')) if isinstance(x, str) and x else 0)
             critical_path_ids = find_critical_path(df.copy()); df['is_critical'] = df['id'].isin(critical_path_ids).astype(int)
             train_df = df[df['status'].isin(['Completed', 'At Risk'])].copy(); train_df['target'] = (train_df['status'] == 'At Risk').astype(int)
             if len(train_df['target'].unique()) < 2: return None, None, None
@@ -794,7 +1126,10 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
             X_predict = predict_df[features]; predict_df['risk_probability'] = model.predict_proba(X_predict)[:, 1]
             return predict_df, model, features
 
-        risk_predictions_df, risk_model, risk_features = train_and_predict_risk(ssm.get_data("project_management", "tasks"))
+        tasks_raw_data = ssm.get_data("project_management", "tasks")
+        # Convert to hashable type for caching
+        immutable_tasks = tuple(frozenset(d.items()) for d in tasks_raw_data)
+        risk_predictions_df, risk_model, risk_features = train_and_predict_risk(immutable_tasks)
 
         if risk_predictions_df is not None:
             st.markdown("**Forecasted Delay Probability for Future Tasks**")
@@ -814,9 +1149,9 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
                 selected_task_name = st.selectbox("Select a high-risk task to analyze:", options=high_risk_tasks)
                 
                 task_data = risk_predictions_df[risk_predictions_df['name'] == selected_task_name].iloc[0]
-                task_features = task_data[risk_features]
+                task_features_values = task_data[risk_features].values
                 
-                contributions = task_features * risk_model.coef_[0]
+                contributions = task_features_values * risk_model.coef_[0]
                 contribution_df = pd.DataFrame({'feature': risk_features, 'contribution': contributions}).sort_values('contribution', ascending=True)
                 
                 fig_contrib = px.bar(contribution_df, x='contribution', y='feature', orientation='h',
@@ -880,23 +1215,40 @@ def main() -> None:
     """Main function to configure and run the Streamlit application."""
     st.set_page_config(layout="wide", page_title="DHF Command Center", page_icon="🚀")
     
-    try: ssm = SessionStateManager(); logger.info("Application initialized. Session State Manager loaded.")
+    try:
+        ssm = SessionStateManager()
+        logger.info("Application initialized. Session State Manager loaded.")
     except Exception as e:
         st.error("Fatal Error: Could not initialize Session State. The application cannot continue.")
-        logger.critical(f"Failed to instantiate SessionStateManager: {e}", exc_info=True); st.stop()
+        logger.critical(f"Failed to instantiate SessionStateManager: {e}", exc_info=True)
+        st.stop()
 
-    try: tasks_raw = ssm.get_data("project_management", "tasks"); tasks_df_processed = preprocess_task_data(tasks_raw)
+    try:
+        tasks_raw = ssm.get_data("project_management", "tasks")
+        tasks_df_processed = preprocess_task_data(tasks_raw)
+        
+        # OPTIMIZATION: Pre-group document data for efficient lookup.
+        docs_df = get_cached_df(ssm.get_data("design_outputs", "documents"))
+        if 'phase' in docs_df.columns:
+            # Create a dictionary mapping each phase to its corresponding DataFrame slice
+            docs_by_phase = {phase: data for phase, data in docs_df.groupby('phase')}
+        else:
+            docs_by_phase = {}
+
     except Exception as e:
-        st.error("Failed to process project task data for dashboard."); logger.error(f"Error during task data pre-processing: {e}", exc_info=True)
+        st.error("Failed to process initial project data for dashboard.")
+        logger.error(f"Error during initial data pre-processing: {e}", exc_info=True)
         tasks_df_processed = pd.DataFrame()
+        docs_by_phase = {}
 
-    st.title("🚀 DHF Command Center"); project_name = ssm.get_data("design_plan", "project_name")
-    st.caption(f"Live monitoring for the **{project_name}** project.")
+    st.title("🚀 DHF Command Center")
+    project_name = ssm.get_data("design_plan", "project_name")
+    st.caption(f"Live monitoring for the **{project_name or 'N/A'}** project.")
 
     tab_names = ["📊 **DHF Health Dashboard**", "🗂️ **DHF Sections Explorer**", "🔬 **Advanced Analytics**", "📈 **Statistical Workbench**", "🤖 **Machine Learning Lab**", "🏛️ **QE & Compliance Guide**"]
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(tab_names)
 
-    with tab1: render_health_dashboard_tab(ssm, tasks_df_processed)
+    with tab1: render_health_dashboard_tab(ssm, tasks_df_processed, docs_by_phase)
     with tab2: render_dhf_explorer_tab(ssm)
     with tab3: render_advanced_analytics_tab(ssm)
     with tab4: render_statistical_tools_tab(ssm)
