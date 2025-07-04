@@ -274,9 +274,9 @@ def render_risk_and_fmea_dashboard(ssm: SessionStateManager) -> None:
             df['RPN'] = df['S'] * df['O'] * df['D']
             
             # Use deterministic seeding for jitter to prevent flickering UI
-            np.random.seed(0)
-            df['S_jitter'] = df['S'] + np.random.uniform(-0.1, 0.1, len(df))
-            df['O_jitter'] = df['O'] + np.random.uniform(-0.1, 0.1, len(df))
+            rng = np.random.default_rng(0)
+            df['S_jitter'] = df['S'] + rng.uniform(-0.1, 0.1, len(df))
+            df['O_jitter'] = df['O'] + rng.uniform(-0.1, 0.1, len(df))
 
             fig = go.Figure()
 
@@ -502,11 +502,11 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
         df = pd.DataFrame(action_items_list)
         for review in reviews_list:
             review_date = pd.to_datetime(review.get('date'))
-            for item in review.get("action_items", []):
-                # Ensure item is a dict for key access
-                item_dict = dict(item) if isinstance(item, frozenset) else item
-                if 'id' in item_dict:
-                    df.loc[df['id'] == item_dict['id'], 'review_date'] = review_date
+            # Handle nested action items which are now frozensets of tuples
+            action_items_in_review = [dict(item_fs) for item_fs in review.get("action_items", [])]
+            for item in action_items_in_review:
+                if 'id' in item:
+                    df.loc[df['id'] == item['id'], 'review_date'] = review_date
 
         df['due_date'] = pd.to_datetime(df['due_date'], errors='coerce')
         df['created_date'] = pd.to_datetime(df.get('review_date'), errors='coerce')
@@ -524,11 +524,18 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
             lifespan = (completed_items['due_date'] - completed_items['created_date']).dt.days.fillna(1).astype(int)
             lifespan = lifespan.apply(lambda d: max(1, d))
             
-            # BUG FIX: Use a deterministic "random" number for completion date simulation
+            ### BUG FIX: Corrected the seeding function ###
             def get_deterministic_completion(row):
-                seed = int(hashlib.md5(str(row['id']).encode()).hexdigest(), 16)
-                np.random.seed(seed)
-                return np.random.randint(1, row['lifespan'] + 1)
+                # 1. Generate the full 128-bit integer from the hash
+                full_hash_int = int(hashlib.md5(str(row['id']).encode()).hexdigest(), 16)
+                # 2. Constrain it to the valid 32-bit unsigned integer range for the seed
+                seed_value = full_hash_int % (2**32)
+                # 3. BEST PRACTICE: Use the modern, isolated Generator API
+                rng = np.random.default_rng(seed_value)
+                # 4. Use the generator to get a random integer
+                # Note: .integers is exclusive of the high end, so add 1
+                return rng.integers(1, row['lifespan'] + 1) if row['lifespan'] >= 1 else 1
+
 
             completed_items['lifespan'] = lifespan
             completion_days = completed_items.apply(get_deterministic_completion, axis=1)
