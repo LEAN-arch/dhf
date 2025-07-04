@@ -20,8 +20,11 @@ numpy~=1.26.4         # Fundamental package for numerical operations; a core dep
 # --- Visualization ---
 plotly~=5.19.0        # The primary library for creating all interactive charts (Gantt, Sankey, bar, etc.).
 
-# --- Statistical Analysis ---
-scipy~=1.12.0         # Used for advanced statistical functions, such as the t-test in the stats tools.
+# --- Statistical Analysis & Modeling ---
+scipy~=1.12.0         # Used for statistical functions, such as t-test, Shapiro-Wilk, and Mann-Whitney U.
+statsmodels~=0.14.1   # Required for advanced statistical modeling, specifically for the ANOVA table in the DOE tool.
 
 # --- Machine Learning ---
 scikit-learn~=1.4.1   # Required for the machine learning models (RandomForest, LogisticRegression) in the ML Lab.
+
+
