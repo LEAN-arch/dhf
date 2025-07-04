@@ -702,10 +702,11 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
             st.markdown("#### The 'Why': Business Justification")
             st.markdown("""- **Proactive vs. Reactive:** Instead of discovering a failed batch during final inspection (reactive), this model predicts failure ahead of time (proactive).\n- **COPQ Reduction:** It significantly reduces the Cost of Poor Quality (COPQ) by preventing scrap, rework, and wasted materials.\n- **Process Understanding:** The model's *feature importances* tell engineers which process parameters have the biggest impact on quality, guiding process optimization efforts (like a DOE).""")
             st.markdown("#### The 'How': Advanced Interpretation with SHAP")
-            st.markdown("""We train a **Random Forest Classifier** and then use **SHAP (SHapley Additive exPlanations)** to interpret its predictions.\n- **SHAP Summary Plot:** This is a major upgrade from a simple feature importance chart. It shows not only *which* features are important but also *how* they impact the prediction. Red dots indicate high feature values, blue dots indicate low values. Dots to the right push the model towards predicting "Fail", while dots to the left push towards "Pass".\n- **Enhanced Confusion Matrix:** Our new matrix is a professional heatmap that includes clear labels and percentages for intuitive performance assessment.""")
+            st.markdown("""We train a **Random Forest Classifier** and then use **SHAP (SHapley Additive exPlanations)** to interpret its predictions.\n- **Feature Importance Plot:** This bar chart shows the average impact of each feature on the model's prediction. Higher values mean more importance.\n- **SHAP Summary Plot:** This is a major upgrade that shows not only *which* features are important but also *how* their values impact the prediction. Red dots indicate high feature values, blue dots indicate low values. Dots to the right push the model towards predicting "Fail", while dots to the left push towards "Pass".\n- **Enhanced Confusion Matrix:** Our new matrix is a professional heatmap that includes clear labels and percentages for intuitive performance assessment.""")
 
         @st.cache_data
         def generate_and_train_quality_model():
+            """Generates synthetic quality data and trains a Random Forest model."""
             np.random.seed(42); n_samples = 500
             data = {'temperature': np.random.normal(90, 5, n_samples), 'pressure': np.random.normal(300, 20, n_samples), 'viscosity': np.random.normal(50, 3, n_samples)}
             df = pd.DataFrame(data)
@@ -737,18 +738,27 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
             st.plotly_chart(fig, use_container_width=True)
 
         with col2:
-            st.markdown("**Feature Impact on Prediction (SHAP)**")
+            st.markdown("**Overall Feature Importance**")
             st.caption("Which factors have the largest average impact?")
             explainer = shap.TreeExplainer(model)
             shap_values = explainer.shap_values(X_test)
             
-            fig, ax = plt.subplots(figsize=(6, 4))
-            shap.summary_plot(shap_values[1], X_test, plot_type="bar", show=False)
-            st.pyplot(fig, use_container_width=True)
+            # --- DEFINITIVE FIX ---
+            # 1. Calculate the mean absolute SHAP values for the "Fail" class (class 1)
+            mean_abs_shap = np.abs(shap_values[1]).mean(axis=0)
+            feature_names = X_test.columns
+            importance_df = pd.DataFrame({'feature': feature_names, 'importance': mean_abs_shap}).sort_values('importance', ascending=True)
+            
+            # 2. Plot the results using Plotly Express for robustness and better aesthetics
+            fig = px.bar(importance_df, x='importance', y='feature', orientation='h',
+                         title="Average Impact on Model Output")
+            fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10), yaxis_title=None, xaxis_title="Mean Absolute SHAP Value")
+            st.plotly_chart(fig, use_container_width=True)
 
         st.subheader("Deep Dive: How Feature Values Drive Failure")
         st.markdown("The plot below shows each individual prediction from the test set. Red dots are high feature values, blue are low. For `temperature`, you can see high (red) values push the prediction towards failure (positive SHAP value), while low (blue) values push it towards passing.")
         
+        # This is the "beeswarm" plot, which needs the same single-class SHAP values but uses the original function.
         fig_shap_summary, ax_shap_summary = plt.subplots()
         shap.summary_plot(shap_values[1], X_test, show=False, plot_size=(10, 4))
         ax_shap_summary.set_xlabel("SHAP value (impact on model output towards 'Fail')")
@@ -815,7 +825,6 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
 
         else:
             st.info("Not enough historical data (e.g., tasks marked 'At Risk') to train a predictive model yet.")
-
 
 def render_compliance_guide_tab():
     """Renders the static educational content for the QE & Compliance Guide tab."""
