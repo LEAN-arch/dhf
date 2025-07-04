@@ -536,7 +536,6 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
                 # Note: .integers is exclusive of the high end, so add 1
                 return rng.integers(1, row['lifespan'] + 1) if row['lifespan'] >= 1 else 1
 
-
             completed_items['lifespan'] = lifespan
             completion_days = completed_items.apply(get_deterministic_completion, axis=1)
             df.loc[completed_mask, 'completion_date'] = completed_items['created_date'] + pd.to_timedelta(completion_days, unit='d')
@@ -1092,7 +1091,8 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
             shap_values_fail = shap_explanation[:, :, 1]
             
             fig_bar, ax_bar = plt.subplots(figsize=(6, 4))
-            shap.summary_plot(shap_values_fail, X_test, plot_type="bar", show=False, axis=ax_bar)
+            ### BUG FIX: Corrected SHAP API usage. ###
+            shap.summary_plot(shap_values_fail, plot_type="bar", show=False, axis=ax_bar)
             plt.tight_layout()
             st.pyplot(fig_bar, clear_figure=True)
 
@@ -1102,7 +1102,8 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
         # Use the same robust Explanation object for the beeswarm plot
         shap_values_fail = shap_explanation[:, :, 1]
         fig_shap_summary, ax_shap_summary = plt.subplots()
-        shap.summary_plot(shap_values_fail, X_test, show=False, plot_size=None, axis=ax_shap_summary)
+        ### BUG FIX: Corrected SHAP API usage. ###
+        shap.summary_plot(shap_values_fail, show=False, plot_size=None, axis=ax_shap_summary)
         ax_shap_summary.set_xlabel("SHAP value (impact on model output towards 'Fail')")
         plt.tight_layout()
         st.pyplot(fig_shap_summary, clear_figure=True)
