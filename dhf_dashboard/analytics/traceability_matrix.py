@@ -4,7 +4,8 @@ Module for rendering the Design History File (DHF) Traceability Matrix.
 
 This component provides a critical view for compliance, showing the linkage
 between design inputs (requirements), design outputs (via verification), and
-user needs (via validation).
+user needs (via validation). This version is hardened against data-dependent
+schema errors.
 """
 
 # --- Standard Library Imports ---
@@ -39,7 +40,8 @@ def generate_traceability_data(
 ) -> pd.DataFrame:
     """
     Loads, merges, and pivots data to create the traceability matrix.
-    This expensive data processing step is cached for performance.
+    This expensive data processing step is cached for performance and is robust
+    against missing verification or validation data.
 
     Returns:
         pd.DataFrame: A DataFrame representing the traceability matrix, or an
@@ -49,71 +51,72 @@ def generate_traceability_data(
     if not requirements:
         return pd.DataFrame()
 
-    reqs_df = pd.DataFrame(requirements)
+    reqs_df = pd.DataFrame(requirements)[['id', 'description', 'is_risk_control']]
     ver_df = pd.DataFrame(verifications)
     val_df = pd.DataFrame(validations)
 
-    # --- Verification Trace ---
-    # Merge requirements with verification tests that trace to them
-    ver_trace_df = pd.DataFrame()
+    # --- FIX: The entire data shaping logic is re-architected for robustness ---
+    # We will create two separate trace DataFrames and then merge them.
+
+    # 1. Create Verification Trace
+    ver_trace = pd.DataFrame()
     if not ver_df.empty and 'input_verified_id' in ver_df.columns:
-        ver_trace_df = pd.merge(
-            reqs_df, ver_df,
-            left_on='id', right_on='input_verified_id',
-            how='left', suffixes=('_req', '_ver')
+        # Link requirements to their verification tests
+        ver_trace = pd.merge(
+            reqs_df,
+            ver_df[['id', 'input_verified_id']],
+            left_on='id',
+            right_on='input_verified_id',
+            how='inner' # Only keep requirements that have a verification
         )
-        ver_trace_df['trace_link'] = ver_trace_df.apply(
-            lambda row: '✅' if pd.notna(row['id_ver']) and not row['is_risk_control'] else
-                        '🔵' if pd.notna(row['id_ver']) and row['is_risk_control'] else '',
-            axis=1
+        ver_trace = ver_trace[['id_x', 'description', 'is_risk_control', 'id_y']]
+        ver_trace.columns = ['req_id', 'req_desc', 'is_risk_control', 'test_id']
+        ver_trace['trace_link'] = ver_trace['is_risk_control'].apply(lambda x: '🔵' if x else '✅')
+
+    # 2. Create Validation Trace
+    val_trace = pd.DataFrame()
+    if not val_df.empty and 'user_need_validated' in val_df.columns:
+        # Link requirements (specifically user needs) to their validation studies
+        val_trace = pd.merge(
+            reqs_df,
+            val_df[['id', 'user_need_validated']],
+            left_on='id',
+            right_on='user_need_validated',
+            how='inner'
         )
+        val_trace = val_trace[['id_x', 'description', 'is_risk_control', 'id_y']]
+        val_trace.columns = ['req_id', 'req_desc', 'is_risk_control', 'test_id']
+        val_trace['trace_link'] = '✅' # Validation is always a standard check mark
+
+    # 3. Combine Traces
+    # Concatenate the two trace types into a single long-form DataFrame
+    if not ver_trace.empty and not val_trace.empty:
+        long_form_trace = pd.concat([ver_trace, val_trace], ignore_index=True)
+    elif not ver_trace.empty:
+        long_form_trace = ver_trace
+    elif not val_trace.empty:
+        long_form_trace = val_trace
     else:
-        ver_trace_df = reqs_df.copy()
-        ver_trace_df['id_ver'] = None
-        ver_trace_df['trace_link'] = ''
-
-    # --- Validation Trace ---
-    # This block is now robust against empty validation data.
-    full_trace_df = pd.DataFrame()
-    if not val_df.empty and 'user_need_validated' in val_df.columns and 'id' in val_df.columns:
-        full_trace_df = pd.merge(
-            ver_trace_df, val_df,
-            left_on='id_req', right_on='user_need_validated',
-            how='left', suffixes=('', '_val')
-        )
-    else:
-        # FIX: Ensure DataFrame schema is consistent even if val_df is empty.
-        # Create a copy and manually add the columns that the merge would have created.
-        full_trace_df = ver_trace_df.copy()
-        full_trace_df['id_val'] = None # This is the critical missing column.
-
-    # Now, 'id_val' is guaranteed to exist in full_trace_df.
-    # The apply function can safely access it.
-    full_trace_df['trace_link'] = full_trace_df.apply(
-        lambda row: '✅' if pd.notna(row['id_val']) else row['trace_link'],
-        axis=1
-    )
-    # Combine test/study IDs into a single column for pivoting
-    full_trace_df['test_id'] = full_trace_df['id_ver'].fillna(full_trace_df['id_val'])
-
-    # --- Pivot to create the matrix ---
-    if 'test_id' in full_trace_df.columns and not full_trace_df['test_id'].dropna().empty:
-        matrix_df = full_trace_df.pivot_table(
-            index=['id_req', 'description'],
-            columns='test_id',
-            values='trace_link',
-            aggfunc='first'
-        ).fillna('')
+        # If there are no links at all, just return the requirements list
+        matrix_df = reqs_df.set_index(['id', 'description'])
         matrix_df.index.names = ['Requirement ID', 'Description']
-        logger.info(f"Generated traceability matrix with {len(matrix_df)} rows.")
         return matrix_df
+
+    # 4. Pivot to create the final matrix
+    # This is now safe because the schema is consistent.
+    matrix_df = long_form_trace.pivot_table(
+        index=['req_id', 'req_desc'],
+        columns='test_id',
+        values='trace_link',
+        aggfunc='first'
+    ).fillna('')
+    matrix_df.index.names = ['Requirement ID', 'Description']
     
-    # Fallback for when there are no tests/studies at all
-    else:
-        matrix_df = reqs_df[['id', 'description']].set_index(['id', 'description'])
-        matrix_df.index.names = ['Requirement ID', 'Description']
-        logger.info("Generated traceability matrix with requirements but no test columns.")
-        return matrix_df
+    # Add back any requirements that have no links at all
+    full_matrix = matrix_df.reindex(pd.MultiIndex.from_frame(reqs_df[['id', 'description']])).fillna('')
+    
+    logger.info(f"Generated traceability matrix with {len(full_matrix)} rows.")
+    return full_matrix
 
 
 def render_traceability_matrix(ssm: SessionStateManager):
