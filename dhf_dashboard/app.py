@@ -478,6 +478,7 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
     burndown_df_source = get_cached_df(action_items_for_burndown)
     if not burndown_df_source.empty:
         df = burndown_df_source.copy()
+        # FIX: Ensure all date columns are consistently converted to datetime objects
         df['created_date'] = pd.to_datetime(df['review_date']) + pd.to_timedelta(np.random.randint(0, 2, len(df)), unit='d')
         df['due_date'] = pd.to_datetime(df['due_date'], errors='coerce')
         df['completion_date'] = pd.NaT 
@@ -737,7 +738,7 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
 
         with col2:
             st.markdown("**Feature Impact on Prediction (SHAP)**")
-            st.caption("Which factors push the prediction to 'Fail' vs. 'Pass'?")
+            st.caption("Which factors have the largest average impact?")
             explainer = shap.TreeExplainer(model)
             shap_values = explainer.shap_values(X_test)
             
@@ -747,8 +748,10 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
 
         st.subheader("Deep Dive: How Feature Values Drive Failure")
         st.markdown("The plot below shows each individual prediction from the test set. Red dots are high feature values, blue are low. For `temperature`, you can see high (red) values push the prediction towards failure (positive SHAP value), while low (blue) values push it towards passing.")
+        
         fig_shap_summary, ax_shap_summary = plt.subplots()
         shap.summary_plot(shap_values[1], X_test, show=False, plot_size=(10, 4))
+        ax_shap_summary.set_xlabel("SHAP value (impact on model output towards 'Fail')")
         st.pyplot(fig_shap_summary)
 
     with ml_tabs[1]:
