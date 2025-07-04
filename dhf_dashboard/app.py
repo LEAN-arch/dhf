@@ -401,18 +401,13 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
     """
     st.header("Executive Health Summary")
     
-    # ==========================================================================
-    # --- 1. HEALTH SCORE & KHI CALCULATION ---
-    # ==========================================================================
-    
-    # --- Schedule Performance Score ---
+    # --- Health Score & KHI Calculation ---
     schedule_score = 0
     if not tasks_df.empty:
         today = pd.to_datetime('today'); overdue_in_progress = tasks_df[(tasks_df['status'] == 'In Progress') & (tasks_df['end_date'] < today)]
         total_in_progress = tasks_df[tasks_df['status'] == 'In Progress']
         schedule_score = (1 - (len(overdue_in_progress) / len(total_in_progress))) * 100 if not total_in_progress.empty else 100
     
-    # --- Quality & Risk Score ---
     hazards_df = get_cached_df(ssm.get_data("risk_management_file", "hazards")); risk_score = 0
     if not hazards_df.empty and all(c in hazards_df.columns for c in ['initial_S', 'initial_O', 'initial_D', 'final_S', 'final_O', 'final_D']):
         hazards_df['initial_rpn'] = hazards_df['initial_S'] * hazards_df['initial_O'] * hazards_df['initial_D']
@@ -421,7 +416,6 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
         risk_reduction_pct = ((initial_rpn_sum - final_rpn_sum) / initial_rpn_sum) * 100 if initial_rpn_sum > 0 else 100
         risk_score = max(0, risk_reduction_pct)
     
-    # --- Execution & Compliance Score ---
     reviews_data = ssm.get_data("design_reviews", "reviews")
     original_action_items = [item for r in reviews_data for item in r.get("action_items", [])]
     action_items_df = get_cached_df(original_action_items)
@@ -435,8 +429,6 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
 
     weights = {'schedule': 0.4, 'quality': 0.4, 'execution': 0.2}
     overall_health_score = (schedule_score * weights['schedule']) + (risk_score * weights['quality']) + (execution_score * weights['execution'])
-    
-    # --- KHI Calculations ---
     ver_tests_df = get_cached_df(ssm.get_data("design_verification", "tests")); val_studies_df = get_cached_df(ssm.get_data("design_validation", "studies"))
     total_vv = len(ver_tests_df) + len(val_studies_df); passed_vv = len(ver_tests_df[ver_tests_df['status'] == 'Completed']) + len(val_studies_df[val_studies_df['result'] == 'Pass'])
     vv_pass_rate = (passed_vv / total_vv) * 100 if total_vv > 0 else 0
@@ -446,12 +438,7 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
     critical_capas_count = len(open_capas_df)
     overdue_actions_count = len(action_items_df[action_items_df['status'] == 'Overdue']) if not action_items_df.empty else 0
 
-
-    # ==========================================================================
-    # --- 2. RENDER THE DASHBOARD ---
-    # ==========================================================================
-    
-    # --- Main Health Score Display ---
+    # --- Render Dashboard ---
     col1, col2 = st.columns([1.5, 2])
     with col1:
         fig = go.Figure(go.Indicator(
@@ -466,10 +453,7 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
         sub_col2.metric("Quality & Risk Posture", f"{risk_score:.0f}/100", help=f"Weighted at {weights['quality']*100}%. Based on the percentage of initial RPN that has been mitigated.")
         sub_col3.metric("Execution & Compliance", f"{execution_score:.0f}/100", help=f"Weighted at {weights['execution']*100}%. Based on the ratio of overdue items to all open action items.")
         st.caption("The Overall Health Score is a weighted average of these three key performance domains.")
-    
     st.divider()
-
-    # --- KHI Display ---
     st.subheader("Key Health Indicators (KHIs)"); khi_col1, khi_col2, khi_col3, khi_col4 = st.columns(4)
     with khi_col1:
         st.metric(label="V&V Pass Rate", value=f"{vv_pass_rate:.1f}%", help="Percentage of all Verification and Validation protocols that are complete and passing."); st.progress(vv_pass_rate / 100)
@@ -479,27 +463,21 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
         st.metric(label="Open CAPAs", value=critical_capas_count, delta=critical_capas_count, delta_color="inverse", help="Count of open CAPAs. Lower is better.")
     with khi_col4:
         st.metric(label="Overdue Action Items", value=overdue_actions_count, delta=overdue_actions_count, delta_color="inverse", help="Total number of action items from all design reviews that are past their due date.")
-    
     st.divider()
-    
-    # --- Action Item Burn-down Chart with REALISTIC data ---
     st.subheader("Action Item Health (Last 30 Days)")
     st.markdown("This chart shows the trend of open action items. A healthy project shows a downward or stable trend. A rising red area indicates a growing backlog of overdue work, which requires management attention.")
     
-    # Use a deep copy to prevent any chance of session state mutation
-    action_items_for_burndown = copy.deepcopy(original_action_items)
-    if action_items_for_burndown:
-        df = pd.DataFrame(action_items_for_burndown)
-        
-        # 1. Simulate Creation and Completion Dates Robustly
-        for i, review in enumerate(reviews_data):
+    if original_action_items:
+        df = pd.DataFrame(copy.deepcopy(original_action_items))
+        for review in reviews_data:
+            review_date = pd.to_datetime(review.get('date'))
             for item in review.get("action_items", []):
-                df.loc[df['id'] == item['id'], 'review_date'] = pd.to_datetime(review['date'])
-
-        df['due_date'] = pd.to_datetime(df['due_date'], errors='coerce')
-        df['created_date'] = df['review_date'] + pd.to_timedelta(np.random.randint(0, 2, len(df)), unit='d')
-        df['completion_date'] = pd.NaT 
+                df.loc[df['id'] == item['id'], 'review_date'] = review_date
         
+        df['due_date'] = pd.to_datetime(df['due_date'], errors='coerce')
+        df['created_date'] = pd.to_datetime(df.get('review_date'), errors='coerce') + pd.to_timedelta(np.random.randint(0, 2, len(df)), unit='d')
+        df['completion_date'] = pd.NaT 
+
         completed_mask = df['status'] == 'Completed'
         if completed_mask.any():
             completed_items = df[completed_mask].copy()
@@ -508,41 +486,33 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
             completion_days = [np.random.randint(1, d + 1) for d in lifespan]
             df.loc[completed_mask, 'completion_date'] = completed_items['created_date'] + pd.to_timedelta(completion_days, unit='d')
 
-        # 2. Calculate daily burndown and composition
         today = pd.to_datetime('today'); date_range = pd.date_range(end=today, periods=30, freq='D')
         
         daily_counts = []
         for day in date_range:
-            open_mask = (df['created_date'] <= day) & ((df['completion_date'].isna()) | (df['completion_date'] > day))
-            open_today_df = df[open_mask]
+            created_mask = df['created_date'] <= day
+            completed_mask = (df['completion_date'].notna()) & (df['completion_date'] <= day)
+            open_on_day_df = df[created_mask & ~completed_mask]
             
-            overdue_count = len(open_today_df[open_today_df['due_date'] < day])
-            ontime_count = len(open_today_df) - overdue_count
+            if not open_on_day_df.empty:
+                overdue_count = (open_on_day_df['due_date'] < day).sum()
+                ontime_count = len(open_on_day_df) - overdue_count
+            else:
+                overdue_count = 0; ontime_count = 0
             daily_counts.append({'date': day, 'Overdue': overdue_count, 'On-Time': ontime_count})
         
         burndown_df = pd.DataFrame(daily_counts)
         
-        # 3. Render the stacked area chart
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=burndown_df['date'], y=burndown_df['On-Time'],
-            mode='lines', name='On-Time / Open', fill='tozeroy',
-            stackgroup='one', line=dict(color='seagreen'),
-            hovertemplate='<b>%{x|%Y-%m-%d}</b><br>On-Time: %{y}<extra></extra>'
-        ))
-        fig.add_trace(go.Scatter(
-            x=burndown_df['date'], y=burndown_df['Overdue'],
-            mode='lines', name='Overdue', fill='tonexty',
-            stackgroup='one', line=dict(color='crimson'),
-            hovertemplate='Overdue: %{y}<extra></extra>'
-        ))
-        fig.update_layout(title="Trend of Open Action Items by Status", yaxis_title="Number of Open Items", height=350, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+        fig = px.area(burndown_df, x='date', y=['On-Time', 'Overdue'],
+                      color_discrete_map={'On-Time': 'seagreen', 'Overdue': 'crimson'},
+                      title="Trend of Open Action Items by Status",
+                      labels={'value': 'Number of Open Items', 'date': 'Date', 'variable': 'Status'})
+        fig.update_layout(height=350, legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
         st.plotly_chart(fig, use_container_width=True)
     else:
         st.caption("No action item data to generate a burn-down chart.")
-
-    st.divider()
     
+    st.divider()
     st.header("Deep Dives")
     with st.expander("Expand to see Phase Gate Readiness & Timeline Details"):
         render_dhf_completeness_panel(ssm, tasks_df)
@@ -780,14 +750,13 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
             st.caption("Which factors have the largest average impact?")
             explainer = shap.TreeExplainer(model)
             
-            # --- DEFINITIVE FIX ---
-            # 1. Use the modern explainer API to get a structured Explanation object
+            # Use the modern explainer API to get a structured Explanation object
             shap_explanation = explainer(X_test)
             
-            # 2. Select the SHAP values for the "Fail" class (class 1)
+            # Select the SHAP values for the "Fail" class (class 1)
             shap_values_fail = shap_explanation[:, :, 1]
             
-            # 3. Create the bar plot using the robust Explanation object
+            # Create the bar plot using the robust Explanation object
             fig, ax = plt.subplots(figsize=(6, 4))
             shap.summary_plot(shap_values_fail, X_test, plot_type="bar", show=False)
             st.pyplot(fig, use_container_width=True)
