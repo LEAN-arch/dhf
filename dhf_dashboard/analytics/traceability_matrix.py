@@ -1,229 +1,155 @@
-# File: dhf_dashboard/analytics/traceability_matrix.py
-# --- Enhanced Version (Unabridged) ---
+# --- Definitive, Corrected, and Unabridged Optimized Version ---
 """
-Renders the DHF Traceability Matrix.
+Module for rendering the Design History File (DHF) Traceability Matrix.
 
-This module provides the logic for generating and displaying a full traceability
-matrix, a critical compliance artifact that demonstrates the linkage between all
-Design Control elements, from user needs to validation.
+This component provides a critical view for compliance, showing the linkage
+between design inputs (requirements), design outputs (via verification), and
+user needs (via validation).
 """
 
 # --- Standard Library Imports ---
 import logging
+from typing import Dict, List
 
 # --- Third-party Imports ---
 import pandas as pd
 import streamlit as st
 
 # --- Local Application Imports ---
-from ..utils.session_state_manager import SessionStateManager
+from dhf_dashboard.utils.session_state_manager import SessionStateManager
 
 # --- Setup Logging ---
 logger = logging.getLogger(__name__)
 
 
-def render_traceability_matrix(ssm: SessionStateManager) -> None:
-    """
-    Generates and displays a traceability matrix from user needs to V&V.
-
-    This function fetches all relevant data from the session state, constructs
-    a matrix with design inputs as the primary axis, and then maps outputs,
-    verifications, and validations back to these inputs. It highlights gaps
-    in traceability, which is essential for audit readiness.
-
-    Args:
-        ssm (SessionStateManager): The session state manager instance to access DHF data.
-    """
-    st.header("🔬 Live Traceability Matrix")
-    st.info("""
-    This matrix provides end-to-end traceability from User Needs and Design Inputs to Design Outputs, Verification, and Validation.
-    - ✅: A direct link exists. Hover over the column header for details.
-    - ❌: A link is missing, representing a potential compliance gap.
-    - N/A: The link is not applicable for this type of requirement.
-    """)
-
-    try:
-        # --- 1. Gather all relevant data from the session state ---
-        inputs_df = pd.DataFrame(ssm.get_data("design_inputs", "requirements"))
-        outputs_df = pd.DataFrame(ssm.get_data("design_outputs", "documents"))
-        verifications_df = pd.DataFrame(ssm.get_data("design_verification", "tests"))
-        validations_df = pd.DataFrame(ssm.get_data("design_validation", "studies"))
-        logger.info("Successfully loaded data for traceability matrix generation.")
-
-        if inputs_df.empty:
-            st.warning("No Design Inputs found. Please add requirements in the 'DHF Sections Explorer' tab to build the matrix.")
-            return
-
-        # --- 2. Generate the matrix using a testable helper function ---
-        trace_matrix = generate_trace_matrix(inputs_df, outputs_df, verifications_df, validations_df)
-        logger.info(f"Generated traceability matrix with {len(trace_matrix)} rows.")
-
-        # --- 3. Style and Display the Matrix ---
-        def style_trace_cell(cell_value: str) -> str:
-            """Applies CSS styling to a cell based on its content."""
-            color = 'inherit'
-            if isinstance(cell_value, str):
-                if '❌' in cell_value:
-                    color = '#d62728'  # Red for missing
-                elif '✅' in cell_value:
-                    color = '#2ca02c'  # Green for linked
-            return f'color: {color}; font-weight: bold; text-align: center;'
-
-        st.dataframe(
-            trace_matrix.style.applymap(style_trace_cell, subset=['Output', 'Verification', 'Validation']),
-            use_container_width=True,
-            column_config={
-                "id": st.column_config.TextColumn("Requirement ID", width="medium"),
-                "description": st.column_config.TextColumn("Requirement Description", width="large"),
-                "Output": st.column_config.TextColumn(
-                    "Trace to Output",
-                    help="Does a Design Output (e.g., spec, drawing) exist for this input?"
-                ),
-                "Verification": st.column_config.TextColumn(
-                    "Trace to Verification",
-                    help="Is there a test that verifies the Design Output linked to this input?"
-                ),
-                "Validation": st.column_config.TextColumn(
-                    "Trace to Validation",
-                    help="For User Needs, is there a study (e.g., clinical, usability) that validates it? (N/A for other requirement types)"
-                ),
-            }
-        )
-
-        # --- 4. Add an Export Button ---
-        csv = trace_matrix_to_csv(trace_matrix)
-        st.download_button(
-            label="📥 Export Matrix to CSV",
-            data=csv,
-            file_name="traceability_matrix.csv",
-            mime="text/csv",
-            key='export_trace_matrix'
-        )
-
-    except Exception as e:
-        st.error("An error occurred while generating the traceability matrix. The data may be incomplete or malformed.")
-        logger.error(f"Failed to render traceability matrix: {e}", exc_info=True)
+def style_trace_cell(val: str) -> str:
+    """Applies CSS styling to a cell in the traceability matrix DataFrame."""
+    if '✅' in str(val):
+        return 'background-color: #eaf5ea; color: #2a633a; font-weight: bold; text-align: center;'
+    elif '🔵' in str(val):
+        return 'background-color: #e9f5ff; color: #0056b3; font-weight: bold; text-align: center;'
+    return 'background-color: #f8f9fa; text-align: center;'
 
 
-def generate_trace_matrix(
-    inputs_df: pd.DataFrame,
-    outputs_df: pd.DataFrame,
-    verifications_df: pd.DataFrame,
-    validations_df: pd.DataFrame
+@st.cache_data
+def generate_traceability_data(
+    requirements: List[Dict],
+    verifications: List[Dict],
+    validations: List[Dict]
 ) -> pd.DataFrame:
     """
-    Generates a traceability matrix DataFrame from DHF component DataFrames.
-    This pure function is easily testable.
-
-    Args:
-        inputs_df: DataFrame of design inputs.
-        outputs_df: DataFrame of design outputs.
-        verifications_df: DataFrame of design verifications.
-        validations_df: DataFrame of design validations.
+    Loads, merges, and pivots data to create the traceability matrix.
+    This expensive data processing step is cached for performance.
 
     Returns:
-        A styled DataFrame representing the traceability matrix.
+        pd.DataFrame: A DataFrame representing the traceability matrix, or an
+                      empty DataFrame if source data is missing.
     """
-    if inputs_df.empty:
+    logger.info("Generating traceability matrix data...")
+    if not requirements:
         return pd.DataFrame()
 
-    trace_matrix = inputs_df[['id', 'description', 'source_type']].copy()
-    
-    # --- Map Design Outputs to Inputs ---
-    if not outputs_df.empty and 'linked_input_id' in outputs_df.columns:
-        output_map = outputs_df.groupby('linked_input_id')['id'].apply(lambda ids: f"✅ ({', '.join(ids)})")
-        trace_matrix['Output'] = trace_matrix['id'].map(output_map)
-    trace_matrix['Output'] = trace_matrix.get('Output', pd.Series(dtype=str)).fillna("❌")
+    reqs_df = pd.DataFrame(requirements)
+    ver_df = pd.DataFrame(verifications)
+    val_df = pd.DataFrame(validations)
 
-    # --- Map Verification to Inputs (Multi-step: Verification -> Output -> Input) ---
-    if not verifications_df.empty and not outputs_df.empty and 'output_verified' in verifications_df.columns:
-        ver_to_out_df = pd.merge(
-            verifications_df[['id', 'output_verified']],
-            outputs_df[['id', 'linked_input_id']],
-            left_on='output_verified', right_on='id',
-            suffixes=('_ver', '_out'), how='inner'
+    # --- Verification Trace ---
+    # Merge requirements with verification tests that trace to them
+    ver_trace_df = pd.DataFrame()
+    if not ver_df.empty and 'input_verified_id' in ver_df.columns:
+        ver_trace_df = pd.merge(
+            reqs_df, ver_df,
+            left_on='id', right_on='input_verified_id',
+            how='left', suffixes=('_req', '_ver')
         )
-        ver_map = ver_to_out_df.groupby('linked_input_id')['id_ver'].apply(lambda ids: f"✅ ({', '.join(ids)})")
-        trace_matrix['Verification'] = trace_matrix['id'].map(ver_map)
-    trace_matrix['Verification'] = trace_matrix.get('Verification', pd.Series(dtype=str)).fillna("❌")
+        # Mark the link type: Risk Control vs. Standard Requirement
+        ver_trace_df['trace_link'] = ver_trace_df.apply(
+            lambda row: '✅' if pd.notna(row['id_ver']) and not row['is_risk_control'] else
+                        '🔵' if pd.notna(row['id_ver']) and row['is_risk_control'] else '',
+            axis=1
+        )
+    else:
+        # Ensure reqs_df has the necessary columns even if ver_df is empty
+        ver_trace_df = reqs_df.copy()
+        ver_trace_df['id_ver'] = None
+        ver_trace_df['trace_link'] = ''
 
-    # --- Map Validation to User Needs ---
-    # Validation is only applicable to 'User Need' type requirements.
-    if not validations_df.empty and 'user_need_validated' in validations_df.columns:
-        val_map = validations_df.groupby('user_need_validated')['id'].apply(lambda ids: f"✅ ({', '.join(ids)})")
-        trace_matrix['Validation'] = trace_matrix['id'].map(val_map)
+    # --- Validation Trace ---
+    # Merge the result with validation studies
+    full_trace_df = pd.DataFrame()
+    if not val_df.empty and 'user_need_validated' in val_df.columns:
+        full_trace_df = pd.merge(
+            ver_trace_df, val_df,
+            left_on='id_req', right_on='user_need_validated',
+            how='left', suffixes=('', '_val')
+        )
+        # Add validation links, overwriting only if a validation link exists
+        full_trace_df['trace_link'] = full_trace_df.apply(
+            lambda row: '✅' if pd.notna(row['id_val']) else row['trace_link'],
+            axis=1
+        )
+        # Combine test/study IDs into a single column for pivoting
+        full_trace_df['test_id'] = full_trace_df['id_ver'].fillna(full_trace_df['id_val'])
+    else:
+        full_trace_df = ver_trace_df.copy()
+        full_trace_df['test_id'] = full_trace_df['id_ver']
+
+    # --- Pivot to create the matrix ---
+    if 'test_id' in full_trace_df.columns and not full_trace_df['test_id'].dropna().empty:
+        matrix_df = full_trace_df.pivot_table(
+            index=['id_req', 'description'],
+            columns='test_id',
+            values='trace_link',
+            aggfunc='first'
+        ).fillna('')
+        matrix_df.index.names = ['Requirement ID', 'Description']
+        return matrix_df
     
-    is_user_need = trace_matrix['source_type'] == 'User Need'
-    trace_matrix['Validation'] = trace_matrix.get('Validation', pd.Series(dtype=str))
-    trace_matrix.loc[is_user_need, 'Validation'] = trace_matrix.loc[is_user_need, 'Validation'].fillna("❌")
-    trace_matrix.loc[~is_user_need, 'Validation'] = "N/A"
+    # Fallback for when there are no tests/studies at all
+    else:
 
-    return trace_matrix.drop(columns=['source_type'])
-
-def trace_matrix_to_csv(trace_matrix_df: pd.DataFrame) -> bytes:
-    """Prepares the trace matrix DataFrame for CSV export."""
-    export_df = trace_matrix_df.copy()
-    for col in ['Output', 'Verification', 'Validation']:
-        if col in export_df.columns:
-            export_df[col] = export_df[col].astype(str).str.replace("✅", "Linked:", regex=False).str.replace("❌", "Missing", regex=False)
-    return export_df.to_csv(index=True).encode('utf-8')
+        matrix_df = reqs_df[['id', 'description']].set_index(['id', 'description'])
+        matrix_df.index.names = ['Requirement ID', 'Description']
+        return matrix_df
 
 
-# ==============================================================================
-# --- UNIT TEST SCAFFOLDING (for `pytest`) ---
-# ==============================================================================
-"""
-import pytest
-
-# To run tests, place this in a 'tests' directory and run pytest.
-# from dhf_dashboard.analytics.traceability_matrix import generate_trace_matrix
-
-@pytest.fixture
-def sample_data():
-    '''Provides sample data for all DHF components.'''
-    data = {
-        'inputs': pd.DataFrame([
-            {'id': 'UN-01', 'description': 'Easy to use', 'source_type': 'User Need'},
-            {'id': 'SR-01', 'description': '8mm diameter', 'source_type': 'QSR (Device)'},
-            {'id': 'SR-02', 'description': 'No verification', 'source_type': 'QSR (Device)'},
-        ]),
-        'outputs': pd.DataFrame([
-            {'id': 'DO-01', 'linked_input_id': 'UN-01'},
-            {'id': 'SPEC-01', 'linked_input_id': 'SR-01'},
-            {'id': 'SPEC-02', 'linked_input_id': 'SR-02'},
-        ]),
-        'verifications': pd.DataFrame([
-            {'id': 'VER-01', 'output_verified': 'SPEC-01'},
-            # No verification for SPEC-02
-        ]),
-        'validations': pd.DataFrame([
-            {'id': 'VAL-01', 'user_need_validated': 'UN-01'},
-        ]),
-    }
-    return data
-
-def test_generate_matrix_fully_linked(sample_data):
-    '''Tests a fully linked User Need and Requirement path.'''
-    matrix = generate_trace_matrix(sample_data['inputs'], sample_data['outputs'], sample_data['verifications'], sample_data['validations'])
+def render_traceability_matrix(ssm: SessionStateManager):
+    """
+    Renders the full Traceability Matrix component.
+    """
+    st.header("Requirement Traceability Matrix")
+    st.markdown("This matrix provides end-to-end traceability from **User Needs** and **Requirements** (rows) to the **Verification** and **Validation** activities (columns) that satisfy them. This is a critical artifact for regulatory submissions and internal quality audits.")
     
-    # Test User Need UN-01
-    un_01_row = matrix.loc[matrix['id'] == 'UN-01'].iloc[0]
-    assert '✅' in un_01_row['Output']
-    assert '❌' in un_01_row['Verification'] # No direct verification link
-    assert '✅' in un_01_row['Validation']
+    col1, col2 = st.columns(2)
+    with col1:
+        st.success("✅ **Verification/Validation Link:** Confirms a design input is met.")
+    with col2:
+        st.info("🔵 **Risk Control Link:** Confirms a specific risk control measure is effective.")
+    st.divider()
 
-    # Test System Requirement SR-01
-    sr_01_row = matrix.loc[matrix['id'] == 'SR-01'].iloc[0]
-    assert '✅' in sr_01_row['Output']
-    assert '✅' in sr_01_row['Verification']
-    assert sr_01_row['Validation'] == 'N/A'
+    try:
+        # Call the cached data generation function
+        styled_matrix_df = generate_traceability_data(
+            ssm.get_data("design_inputs", "requirements"),
+            ssm.get_data("design_verification", "tests"),
+            ssm.get_data("design_validation", "studies")
+        )
+        
+        if not styled_matrix_df.empty:
+            test_columns = [col for col in styled_matrix_df.columns]
+            
+            # FIX: Replaced deprecated `applymap` with `map`
+            st.dataframe(
+                styled_matrix_df.style.map(
+                    style_trace_cell,
+                    subset=test_columns
+                ),
+                use_container_width=True,
+                height=max(300, len(styled_matrix_df) * 40) # Dynamically adjust height
+            )
+        else:
+            st.warning("No requirements data found. Cannot generate traceability matrix.", icon="⚠️")
 
-def test_generate_matrix_with_gap(sample_data):
-    '''Tests a requirement that has an output but is missing verification.'''
-    matrix = generate_trace_matrix(sample_data['inputs'], sample_data['outputs'], sample_data['verifications'], sample_data['validations'])
-    
-    sr_02_row = matrix.loc[matrix['id'] == 'SR-02'].iloc[0]
-    assert '✅' in sr_02_row['Output']
-    assert '❌' in sr_02_row['Verification']
-    assert sr_02_row['Validation'] == 'N/A'
-"""
+    except Exception as e:
+        st.error("An error occurred while generating the traceability matrix.", icon="🚨")
+        logger.error(f"Error in render_traceability_matrix: {e}", exc_info=True)
