@@ -704,6 +704,15 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
             st.markdown("""1.  **Check for Normality:** Many statistical tests, like the t-test, assume the data is normally distributed. We first use the **Shapiro-Wilk test**. If the p-value is high (> 0.05), we can assume normality.\n2.  **Select the Right Test:**\n    - If data is **normal**, we use **Welch's t-test**, a robust version of the t-test that doesn't assume equal variances.\n    - If data is **not normal**, we automatically switch to the **Mann-Whitney U test**, a non-parametric equivalent that compares medians instead of means.\n3.  **Interpret the Result:** We compare the final p-value to our significance level (α = 0.05) to conclude if a significant difference exists.""")
         try:
             ht_data = ssm.get_data("quality_system", "hypothesis_testing_data")
+            # --- FALLBACK DATA ---
+            if not ht_data:
+                st.info("Displaying example data. To use your own, ensure 'hypothesis_testing_data' is in the data model.", icon="ℹ️")
+                rng = np.random.default_rng(0)
+                ht_data = {
+                    'line_a': list(rng.normal(10.2, 0.5, 30)),
+                    'line_b': list(rng.normal(10.0, 0.5, 30))
+                }
+            
             if ht_data and all(k in ht_data for k in ['line_a', 'line_b']):
                 line_a, line_b = ht_data['line_a'], ht_data['line_b']
                 shapiro_a = shapiro(line_a); shapiro_b = shapiro(line_b); is_normal = shapiro_a.pvalue > 0.05 and shapiro_b.pvalue > 0.05
@@ -803,18 +812,31 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
             """)
         try:
             msa_data_list = ssm.get_data("quality_system", "msa_data")
+            # --- FALLBACK DATA ---
+            if not msa_data_list:
+                st.info("Displaying example data. To use your own, ensure 'msa_data' is in the data model.", icon="ℹ️")
+                rng = np.random.default_rng(0)
+                parts_mock = np.repeat(np.arange(1, 11), 6) # 10 parts
+                operators_mock = np.tile(np.repeat(['A', 'B', 'C'], 2), 10) # 3 operators, 2 reps
+                part_means = np.linspace(5.0, 5.5, 10)
+                op_bias = {'A': -0.02, 'B': 0, 'C': 0.03}
+                measurements = []
+                for i, part_id in enumerate(parts_mock):
+                    op_name = operators_mock[i]
+                    base_val = part_means[part_id - 1] + op_bias[op_name]
+                    measurements.append(base_val + rng.normal(0, 0.05)) # 0.05 is gauge error
+                msa_data_list = pd.DataFrame({'part': parts_mock, 'operator': operators_mock, 'measurement': measurements}).to_dict('records')
+
             if msa_data_list and all(k in msa_data_list[0] for k in ['part', 'operator', 'measurement']):
                 df = pd.DataFrame(msa_data_list)
                 
-                # ANOVA model
                 model = ols('measurement ~ C(part) + C(operator) + C(part):C(operator)', data=df).fit()
                 anova_table = sm.stats.anova_lm(model, typ=2)
                 
-                # Calculate Variance Components
                 ms_operator = anova_table.loc['C(operator)', 'mean_sq']
                 ms_part = anova_table.loc['C(part)', 'mean_sq']
                 ms_interact = anova_table.loc['C(part):C(operator)', 'mean_sq']
-                ms_error = anova_table.loc['Residual', 'mean_sq'] # Repeatability
+                ms_error = anova_table.loc['Residual', 'mean_sq']
                 n_parts, n_ops = df['part'].nunique(), df['operator'].nunique()
                 n_reps = len(df) / (n_parts * n_ops) if (n_parts * n_ops) > 0 else 0
 
@@ -826,8 +848,7 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
                 var_part = max(0, (ms_part - ms_interact) / (n_ops * n_reps))
                 var_total = var_gaugeRR + var_part
 
-                if var_total > 1e-9: # Check for non-zero total variance
-                    # Calculate Metrics
+                if var_total > 1e-9:
                     contrib_gauge = (var_gaugeRR / var_total) * 100
                     contrib_part = (var_part / var_total) * 100
                     ndc = int(1.41 * (np.sqrt(var_part) / np.sqrt(var_gaugeRR))) if var_gaugeRR > 1e-9 else float('inf')
@@ -872,6 +893,15 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
             st.markdown("The **p-value** is the key output. It tells you the probability of observing an association as strong as the one in your data, assuming the variables are actually independent.\n- **`p < 0.05`:** You **reject the null hypothesis**. There is a statistically significant association between the variables. This does *not* prove causation, but it's a strong signal to investigate further.\n- **`p >= 0.05`:** You **fail to reject the null hypothesis**. You do not have enough evidence to conclude that an association exists.")
         try:
             chi_data = ssm.get_data("quality_system", "chi_squared_data")
+            # --- FALLBACK DATA ---
+            if not chi_data:
+                st.info("Displaying example data. To use your own, ensure 'chi_squared_data' is in the data model.", icon="ℹ️")
+                rng = np.random.default_rng(1)
+                data = []
+                for _ in range(100): data.append({'supplier': 'Supplier A', 'outcome': rng.choice(['Pass', 'Fail', 'Rework'], p=[0.9, 0.05, 0.05])})
+                for _ in range(100): data.append({'supplier': 'Supplier B', 'outcome': rng.choice(['Pass', 'Fail', 'Rework'], p=[0.7, 0.2, 0.1])})
+                chi_data = data
+
             if chi_data and all(k in chi_data[0] for k in ['supplier', 'outcome']):
                 df = pd.DataFrame(chi_data)
                 contingency_table = pd.crosstab(df['supplier'], df['outcome'])
@@ -891,7 +921,6 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
                         else:
                             st.warning("**Conclusion:** No significant association detected (p >= 0.05).", icon="⚠️")
                     with col2:
-                        # Normalize data for better visualization
                         ct_percent = contingency_table.div(contingency_table.sum(axis=1), axis=0) * 100
                         fig = px.imshow(ct_percent, text_auto='.1f', aspect="auto",
                                         title="Heatmap of Outcomes by Supplier (%)",
@@ -921,6 +950,14 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
             st.markdown("You get two key outputs:\n- **Correlation Coefficient (r):** The strength of the relationship. General rules of thumb: |r| > 0.7 is strong, 0.4 < |r| < 0.7 is moderate, |r| < 0.4 is weak.\n- **P-value:** The confidence in the result. It tests the hypothesis that r=0. If **`p < 0.05`**, you can be confident that the relationship you see is not just due to random chance. **Crucially, statistical significance does not equal practical importance.** A tiny but very consistent correlation in a huge dataset can be statistically significant but practically useless.")
         try:
             corr_data_dict = ssm.get_data("quality_system", "correlation_data")
+            # --- FALLBACK DATA ---
+            if not corr_data_dict:
+                st.info("Displaying example data. To use your own, ensure 'correlation_data' is in the data model.", icon="ℹ️")
+                rng = np.random.default_rng(42)
+                temperature = np.linspace(20, 100, 50)
+                strength = 5 + 0.5 * temperature + rng.normal(0, 5, 50)
+                corr_data_dict = {'temperature': list(temperature), 'strength': list(strength)}
+
             if corr_data_dict and all(k in corr_data_dict for k in ['temperature', 'strength']):
                 df = pd.DataFrame(corr_data_dict)
                 if len(df) > 2:
@@ -962,55 +999,64 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
             st.markdown("- **`p < 0.05`:** You **reject both nulls and claim equivalence**. The data provides strong evidence that the true difference between the groups is within your defined equivalence margin `[-δ, +δ]`.\n- **`p >= 0.05`:** You **cannot claim equivalence**. The difference might be outside your acceptable range, or you don't have enough data to be sure.\nVisually, you have equivalence if the **90% confidence interval** of the difference lies entirely **within** the equivalence bounds.")
         try:
             ht_data = ssm.get_data("quality_system", "hypothesis_testing_data")
+            # --- FALLBACK DATA (same as Hypothesis Test) ---
+            if not ht_data:
+                rng = np.random.default_rng(0)
+                ht_data = {
+                    'line_a': list(rng.normal(10.2, 0.5, 30)),
+                    'line_b': list(rng.normal(10.0, 0.5, 30))
+                }
+            
             if ht_data and all(k in ht_data for k in ['line_a', 'line_b']):
                 line_a, line_b = np.array(ht_data['line_a']), np.array(ht_data['line_b'])
                 
                 st.markdown("**1. Define Equivalence Margin**")
                 delta = st.number_input("Enter the equivalence margin (delta, δ):", min_value=0.0, value=0.5, step=0.1, help="The maximum difference between the groups that you would still consider 'practically the same'.")
 
-                # Perform TOST
                 n1, n2 = len(line_a), len(line_b)
                 mean_diff = np.mean(line_a) - np.mean(line_b)
                 s1, s2 = np.var(line_a, ddof=1), np.var(line_b, ddof=1)
-                pooled_sd = np.sqrt(((n1 - 1) * s1 + (n2 - 1) * s2) / (n1 + n2 - 2))
-                se_diff = pooled_sd * np.sqrt(1/n1 + 1/n2) if (n1 > 0 and n2 > 0) else 0
+                
+                if n1 + n2 > 2:
+                    pooled_sd = np.sqrt(((n1 - 1) * s1 + (n2 - 1) * s2) / (n1 + n2 - 2))
+                    se_diff = pooled_sd * np.sqrt(1/n1 + 1/n2) if (n1 > 0 and n2 > 0) else 0
 
-                if se_diff > 0:
-                    t_stat_lower = (mean_diff - (-delta)) / se_diff
-                    t_stat_upper = (mean_diff - delta) / se_diff
-                    dof = n1 + n2 - 2
-                    
-                    p_lower = stats.t.sf(t_stat_lower, df=dof) # Survival function for one-sided test
-                    p_upper = stats.t.cdf(t_stat_upper, df=dof)
-                    tost_p_value = max(p_lower, p_upper)
-                    
-                    # 90% Confidence Interval for the difference
-                    ci_90 = stats.t.interval(0.90, df=dof, loc=mean_diff, scale=se_diff)
+                    if se_diff > 0:
+                        t_stat_lower = (mean_diff - (-delta)) / se_diff
+                        t_stat_upper = (mean_diff - delta) / se_diff
+                        dof = n1 + n2 - 2
+                        
+                        p_lower = stats.t.sf(t_stat_lower, df=dof)
+                        p_upper = stats.t.cdf(t_stat_upper, df=dof)
+                        tost_p_value = max(p_lower, p_upper)
+                        
+                        ci_90 = stats.t.interval(0.90, df=dof, loc=mean_diff, scale=se_diff)
 
-                    st.markdown("**2. Test Results**")
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.metric("Difference in Means (A - B)", f"{mean_diff:.3f}")
-                        st.metric("TOST P-Value", f"{tost_p_value:.4f}")
-                        st.markdown(f"**90% Confidence Interval:** `[{ci_90[0]:.3f}, {ci_90[1]:.3f}]`")
-                    with col2:
-                        st.markdown("**3. Conclusion**")
-                        is_equivalent = tost_p_value < 0.05
-                        if is_equivalent:
-                            st.success(f"**Conclusion: The groups ARE statistically equivalent** within a margin of ±{delta}.", icon="✅")
-                        else:
-                            st.error(f"**Conclusion: Equivalence CANNOT be claimed** within a margin of ±{delta}.", icon="🚨")
+                        st.markdown("**2. Test Results**")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("Difference in Means (A - B)", f"{mean_diff:.3f}")
+                            st.metric("TOST P-Value", f"{tost_p_value:.4f}")
+                            st.markdown(f"**90% Confidence Interval:** `[{ci_90[0]:.3f}, {ci_90[1]:.3f}]`")
+                        with col2:
+                            st.markdown("**3. Conclusion**")
+                            is_equivalent = tost_p_value < 0.05
+                            if is_equivalent:
+                                st.success(f"**Conclusion: The groups ARE statistically equivalent** within a margin of ±{delta}.", icon="✅")
+                            else:
+                                st.error(f"**Conclusion: Equivalence CANNOT be claimed** within a margin of ±{delta}.", icon="🚨")
 
-                    # Visualization
-                    fig = go.Figure()
-                    fig.add_shape(type="rect", x0=-delta, y0=0, x1=delta, y1=1, line=dict(width=0), fillcolor="rgba(44, 160, 44, 0.2)", layer="below", name="Equivalence Zone")
-                    fig.add_trace(go.Scatter(x=[ci_90[0], ci_90[1]], y=[0.5, 0.5], mode="lines", line=dict(color="blue", width=4), name="90% CI of Difference"))
-                    fig.add_trace(go.Scatter(x=[mean_diff], y=[0.5], mode="markers", marker=dict(color="blue", size=12, symbol="x"), name="Observed Difference"))
-                    fig.update_layout(title="Equivalence Test Visualization", xaxis_title="Difference Between Groups", yaxis=dict(showticklabels=False, range=[0,1]),
-                                      shapes=[dict(type='line', x0=0, y0=0, x1=0, y1=1, line=dict(color='black', dash='dash'))])
-                    st.plotly_chart(fig, use_container_width=True)
+                        fig = go.Figure()
+                        fig.add_shape(type="rect", x0=-delta, y0=0, x1=delta, y1=1, line=dict(width=0), fillcolor="rgba(44, 160, 44, 0.2)", layer="below", name="Equivalence Zone")
+                        fig.add_trace(go.Scatter(x=[ci_90[0], ci_90[1]], y=[0.5, 0.5], mode="lines", line=dict(color="blue", width=4), name="90% CI of Difference"))
+                        fig.add_trace(go.Scatter(x=[mean_diff], y=[0.5], mode="markers", marker=dict(color="blue", size=12, symbol="x"), name="Observed Difference"))
+                        fig.update_layout(title="Equivalence Test Visualization", xaxis_title="Difference Between Groups", yaxis=dict(showticklabels=False, range=[0,1]),
+                                          shapes=[dict(type='line', x0=0, y0=0, x1=0, y1=1, line=dict(color='black', dash='dash'))])
+                        st.plotly_chart(fig, use_container_width=True)
+                    else:
+                        st.warning("Could not perform test. Check for zero variance or empty data groups.")
                 else:
-                    st.warning("Could not perform test. Check for zero variance or empty data groups.")
+                    st.warning("Not enough data points to perform the test.")
             else:
                 st.warning("Equivalence testing data (`hypothesis_testing_data`) is incomplete or missing.")
         except Exception as e:
@@ -1087,11 +1133,9 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
         with col2:
             st.markdown("**Overall Feature Importance**")
             st.caption("Which factors have the largest average impact?")
-            # Select the SHAP values for the "Fail" class (class 1)
             shap_values_fail = shap_explanation[:, :, 1]
             
             # --- BUG FIX: Let SHAP create the plot, then pass it to Streamlit ---
-            # This pattern is more robust across different SHAP versions.
             shap.summary_plot(shap_values_fail, plot_type="bar", show=False)
             st.pyplot(plt.gcf(), clear_figure=True)
 
@@ -1101,10 +1145,9 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
         # --- BUG FIX: Let SHAP create the plot, then pass it to Streamlit ---
         shap_values_fail = shap_explanation[:, :, 1]
         shap.summary_plot(shap_values_fail, show=False)
-        ax = plt.gca() # Get current axis to modify label
+        ax = plt.gca()
         ax.set_xlabel("SHAP value (impact on model output towards 'Fail')")
         st.pyplot(plt.gcf(), clear_figure=True)
-
 
     with ml_tabs[1]:
         st.subheader("Predictive Project Risk: Interactive Analysis")
