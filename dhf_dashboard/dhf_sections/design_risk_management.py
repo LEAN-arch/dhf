@@ -1,12 +1,66 @@
 # File: dhf_dashboard/dhf_sections/design_risk_management.py
+# --- Enhanced Version ---
+"""
+Renders the Risk Management File (RMF) Summary section of the DHF dashboard.
 
-import streamlit as st
+This module provides the UI for documenting the risk analysis process according
+to ISO 14971, including hazard identification, risk estimation, and control.
+"""
+
+# --- Standard Library Imports ---
+import logging
+from typing import Any, Dict, List
+
+# --- Third-party Imports ---
 import pandas as pd
+import streamlit as st
+from pandas.api.types import is_numeric_dtype
+
+# --- Local Application Imports ---
 from ..utils.session_state_manager import SessionStateManager
 
-def render_design_risk_management(ssm: SessionStateManager):
+# --- Setup Logging ---
+logger = logging.getLogger(__name__)
+
+
+def get_risk_level(severity: Any, probability: Any) -> str:
     """
-    Renders the Risk Management File (RMF) Summary section, based on ISO 14971.
+    Calculates a qualitative risk level based on a 5x5 Severity/Probability matrix.
+
+    Args:
+        severity (Any): The severity rating (expected 1-5).
+        probability (Any): The probability rating (expected 1-5).
+
+    Returns:
+        str: The calculated risk level ('Low', 'Medium', 'High') or 'N/A' if inputs are invalid.
+    """
+    # This risk map is a common industry practice.
+    risk_map = {
+        # Probability -> 1(VL),  2(L),     3(P),     4(F),     5(VF)
+        1: ["Low",   "Low",    "Low",    "Medium", "Medium"],  # Severity 1 (Negligible)
+        2: ["Low",   "Low",    "Medium", "Medium", "High"],    # Severity 2 (Minor)
+        3: ["Low",   "Medium", "Medium", "High",   "High"],    # Severity 3 (Serious)
+        4: ["Medium","Medium", "High",   "High",   "High"],    # Severity 4 (Critical)
+        5: ["Medium","High",   "High",   "High",   "High"],    # Severity 5 (Catastrophic)
+    }
+    if pd.isna(severity) or pd.isna(probability) or not is_numeric_dtype(severity) or not is_numeric_dtype(probability):
+        return "N/A"
+    try:
+        sev, prob = int(severity), int(probability)
+        if 1 <= sev <= 5 and 1 <= prob <= 5:
+            # -1 because list indices are 0-4 while ratings are 1-5.
+            return risk_map[sev - 1][prob - 1]
+    except (ValueError, TypeError):
+        return "N/A"
+    return "N/A"
+
+
+def render_design_risk_management(ssm: SessionStateManager) -> None:
+    """
+    Renders the UI for the Risk Management File (RMF) Summary.
+
+    Args:
+        ssm (SessionStateManager): The session state manager to access DHF data.
     """
     st.header("2. Risk Management File (RMF) Summary")
     st.markdown("""
@@ -16,82 +70,136 @@ def render_design_risk_management(ssm: SessionStateManager):
     hazards, foreseeable events, potential harms, and the estimation of risk *before*
     and *after* risk controls are applied.
     """)
-    st.info("Changes made here are saved automatically. Risk Levels are calculated based on Severity and Probability.", icon="ℹ️")
+    st.info("Changes made here are saved automatically. Risk Levels are calculated in real-time based on Severity and Probability.", icon="ℹ️")
 
-    rmf_data = ssm.get_data("risk_management_file")
-    hazards_df = pd.DataFrame(rmf_data.get("hazards", []))
+    try:
+        # --- 1. Load Data and Prepare Dependencies ---
+        rmf_data: Dict[str, Any] = ssm.get_data("risk_management_file")
+        hazards_data: List[Dict[str, Any]] = rmf_data.get("hazards", [])
+        hazards_df = pd.DataFrame(hazards_data)
+        logger.info(f"Loaded {len(hazards_df)} hazard records.")
 
-    st.subheader("2.1 Hazard Analysis and Risk Evaluation")
-    st.markdown("Document all identified hazards. Link risk controls from the Design Inputs section to demonstrate mitigation.")
+        # Prepare list of risk control requirements for the traceability dropdown
+        inputs_data: List[Dict[str, Any]] = ssm.get_data("design_inputs", "requirements")
+        risk_control_reqs = [req for req in inputs_data if req.get('is_risk_control')]
+        risk_control_ids: List[str] = [""] + [req.get('id', '') for req in risk_control_reqs]
+        logger.debug(f"Populated risk control dropdown with: {risk_control_ids}")
 
-    # --- SME Enhancement: Live traceability link for risk controls ---
-    inputs_data = ssm.get_data("design_inputs", "requirements")
-    risk_control_requirement_ids = [""] + [
-        req.get('id', '') for req in inputs_data if req.get('is_risk_control')
-    ]
+        # --- 2. Hazard Analysis Section ---
+        st.subheader("2.1 Hazard Analysis and Risk Evaluation")
+        st.markdown("Document all identified hazards. Link risk controls from the Design Inputs section to demonstrate mitigation.")
 
-    # --- SME Enhancement: Automatic Risk Calculation ---
-    risk_map = {
-        # S/P   1        2        3        4        5
-        1: ["Low",   "Low",    "Low",    "Medium", "Medium"],
-        2: ["Low",   "Low",    "Medium", "Medium", "High"],
-        3: ["Low",   "Medium", "Medium", "High",   "High"],
-        4: ["Medium","Medium", "High",   "High",   "High"],
-        5: ["Medium","High",   "High",   "High",   "High"],
-    }
-    def get_risk_level(severity, probability):
-        if pd.isna(severity) or pd.isna(probability): return "N/A"
-        sev, prob = int(severity), int(probability)
-        if 1 <= sev <= 5 and 1 <= prob <= 5:
-            return risk_map[sev][prob-1]
-        return "N/A"
+        # --- Calculate risk levels before displaying in the editor ---
+        if not hazards_df.empty:
+            hazards_df['initial_risk_level'] = hazards_df.apply(lambda row: get_risk_level(row.get('initial_S'), row.get('initial_O')), axis=1)
+            hazards_df['final_risk_level'] = hazards_df.apply(lambda row: get_risk_level(row.get('final_S'), row.get('final_O')), axis=1)
 
-    # Apply calculations before editing to show current state
-    for index, row in hazards_df.iterrows():
-        hazards_df.loc[index, 'initial_risk_level'] = get_risk_level(row.get('initial_severity'), row.get('initial_probability'))
-        hazards_df.loc[index, 'residual_risk_level'] = get_risk_level(row.get('residual_severity'), row.get('residual_probability'))
+        edited_df = st.data_editor(
+            hazards_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            key="risk_management_editor",
+            column_config={
+                "hazard_id": st.column_config.TextColumn("Hazard ID", help="Unique ID (e.g., H-001)", required=True),
+                "description": st.column_config.TextColumn("Hazard Description", width="large", help="e.g., Premature battery failure.", required=True),
+                "initial_S": st.column_config.NumberColumn("Initial S", help="Severity (1-5)", min_value=1, max_value=5, required=True),
+                "initial_O": st.column_config.NumberColumn("Initial O", help="Occurrence (1-5)", min_value=1, max_value=5, required=True),
+                "initial_D": st.column_config.NumberColumn("Initial D", help="Detection (1-5)", min_value=1, max_value=5, required=True),
+                "initial_risk_level": st.column_config.TextColumn("Initial Risk", help="Calculated automatically.", disabled=True),
+                "risk_control_req_id": st.column_config.SelectboxColumn("Risk Control (Req. ID)", help="Link to the Design Input that mitigates this risk.", options=risk_control_ids),
+                "final_S": st.column_config.NumberColumn("Final S", help="Severity after control.", min_value=1, max_value=5),
+                "final_O": st.column_config.NumberColumn("Final O", help="Occurrence after control.", min_value=1, max_value=5),
+                "final_D": st.column_config.NumberColumn("Final D", help="Detection after control.", min_value=1, max_value=5),
+                "final_risk_level": st.column_config.TextColumn("Final Risk", help="Calculated automatically.", disabled=True),
+            },
+            hide_index=True
+        )
 
-    edited_df = st.data_editor(
-        hazards_df,
-        num_rows="dynamic",
-        use_container_width=True,
-        key="risk_management_editor",
-        column_config={
-            "hazard_id": st.column_config.TextColumn("Hazard ID", help="Unique ID (e.g., H-001)", required=True),
-            "hazard_description": st.column_config.TextColumn("Hazard Description", width="large", help="e.g., Premature battery failure, Incorrect drug dose released.", required=True),
-            "potential_harm": st.column_config.TextColumn("Potential Harm(s)", width="large", help="e.g., Ineffective therapy, Toxic exposure.", required=True),
-            "initial_severity": st.column_config.NumberColumn("Initial S", help="Severity (1-5)", min_value=1, max_value=5, required=True),
-            "initial_probability": st.column_config.NumberColumn("Initial P", help="Probability (1-5)", min_value=1, max_value=5, required=True),
-            "initial_risk_level": st.column_config.TextColumn("Initial Risk", help="Calculated automatically.", disabled=True),
-            "risk_control_req_id": st.column_config.SelectboxColumn("Risk Control (Req. ID)", help="Link to the Design Input that mitigates this risk.", options=risk_control_requirement_ids, required=True),
-            "residual_severity": st.column_config.NumberColumn("Residual S", help="Severity after control.", min_value=1, max_value=5),
-            "residual_probability": st.column_config.NumberColumn("Residual P", help="Probability after control.", min_value=1, max_value=5),
-            "residual_risk_level": st.column_config.TextColumn("Residual Risk", help="Calculated automatically.", disabled=True),
-            "risk_acceptability": st.column_config.SelectboxColumn("Acceptability", options=["", "Acceptable", "Not Acceptable"]),
-        },
-    )
+        # --- Re-calculate after editing to reflect changes immediately ---
+        if not edited_df.empty:
+            edited_df['initial_risk_level'] = edited_df.apply(lambda row: get_risk_level(row.get('initial_S'), row.get('initial_O')), axis=1)
+            edited_df['final_risk_level'] = edited_df.apply(lambda row: get_risk_level(row.get('final_S'), row.get('final_O')), axis=1)
 
-    # Re-calculate after editing to reflect changes
-    for index, row in edited_df.iterrows():
-        edited_df.loc[index, 'initial_risk_level'] = get_risk_level(row.get('initial_severity'), row.get('initial_probability'))
-        edited_df.loc[index, 'residual_risk_level'] = get_risk_level(row.get('residual_severity'), row.get('residual_probability'))
+        # --- 3. Risk-Benefit Analysis Section ---
+        st.subheader("2.2 Overall Residual Risk Acceptability")
+        st.markdown("This is the final conclusion of the risk management process, required by ISO 14971. It should be a formal statement declaring whether the overall residual risk is acceptable in relation to the documented medical benefits of the device.")
+        
+        overall_analysis = st.text_area(
+            "**Risk-Benefit Analysis Statement:**",
+            value=rmf_data.get("overall_risk_benefit_analysis", ""),
+            key="rmf_overall_analysis",
+            height=150,
+            help="Example: 'The overall residual risk of the Smart-Pill System is judged to be acceptable...'"
+        )
 
-    # Update session state
-    rmf_data["hazards"] = edited_df.to_dict('records')
-    ssm.update_data(rmf_data, "risk_management_file")
+        # --- 4. Persist Data ---
+        updated_hazards = edited_df.to_dict('records')
+        
+        if updated_hazards != hazards_data or overall_analysis != rmf_data.get("overall_risk_benefit_analysis"):
+            rmf_data["hazards"] = updated_hazards
+            rmf_data["overall_risk_benefit_analysis"] = overall_analysis
+            ssm.update_data(rmf_data, "risk_management_file")
+            logger.info("Risk management data updated in session state.")
+            st.toast("Risk management file saved!", icon="✅")
+
+    except Exception as e:
+        st.error("An error occurred while displaying the Risk Management section. The data may be malformed.")
+        logger.error(f"Failed to render design risk management: {e}", exc_info=True)
 
 
-    # --- Formal Risk-Benefit Analysis Conclusion ---
-    st.subheader("2.2 Overall Residual Risk Acceptability")
-    st.markdown("""
-    This is the final conclusion of the risk management process, required by ISO 14971.
-    It should be a formal statement declaring whether the overall residual risk is acceptable in relation to the documented medical benefits of the device.
-    """)
-    rmf_data["overall_risk_benefit_analysis"] = st.text_area(
-        "**Risk-Benefit Analysis Statement:**",
-        value=rmf_data.get("overall_risk_benefit_analysis", ""),
-        key="rmf_overall_analysis",
-        height=150,
-        help="Example: 'The overall residual risk of the Smart-Pill System is judged to be acceptable...'"
-    )
-    ssm.update_data(rmf_data, "risk_management_file")
+# ==============================================================================
+# --- UNIT TEST SCAFFOLDING (for `pytest`) ---
+# ==============================================================================
+"""
+import pytest
+
+# from dhf_dashboard.dhf_sections.design_risk_management import get_risk_level
+
+@pytest.mark.parametrize("severity, probability, expected", [
+    (1, 1, "Low"),
+    (3, 3, "Medium"),
+    (5, 5, "High"),
+    (5, 2, "High"),
+    (2, 5, "High"),
+    (3, 1, "Low"),
+    (pd.NA, 5, "N/A"),
+    (5, pd.NA, "N/A"),
+    (None, 5, "N/A"),
+    (6, 1, "N/A"), # Out of bounds
+    (1, 6, "N/A"), # Out of bounds
+    ('a', 1, "N/A"), # Invalid type
+])
+def test_get_risk_level(severity, probability, expected):
+    '''Tests the risk level calculation logic with various inputs.'''
+    assert get_risk_level(severity, probability) == expected
+
+def test_risk_recalculation_on_edit():
+    '''
+    Simulates a user edit in the DataFrame and tests if the risk level
+    is correctly recalculated.
+    '''
+    # 1. Initial DataFrame
+    initial_df = pd.DataFrame([{
+        'hazard_id': 'H-001',
+        'initial_S': 3,
+        'initial_O': 3,
+        'final_S': 1,
+        'final_O': 1
+    }])
+    initial_df['initial_risk_level'] = initial_df.apply(lambda r: get_risk_level(r['initial_S'], r['initial_O']), axis=1)
+    initial_df['final_risk_level'] = initial_df.apply(lambda r: get_risk_level(r['final_S'], r['final_O']), axis=1)
+    
+    assert initial_df.loc[0, 'initial_risk_level'] == 'Medium'
+    assert initial_df.loc[0, 'final_risk_level'] == 'Low'
+
+    # 2. Simulate user edit (e.g., from a data_editor)
+    edited_df = initial_df.copy()
+    edited_df.loc[0, 'initial_S'] = 5 # User increases initial severity
+    
+    # 3. Recalculate based on the edited data
+    edited_df['initial_risk_level'] = edited_df.apply(lambda r: get_risk_level(r['initial_S'], r['initial_O']), axis=1)
+
+    # 4. Assert the change
+    assert edited_df.loc[0, 'initial_risk_level'] == 'High'
+    assert edited_df.loc[0, 'final_risk_level'] == 'Low' # Final risk should be unchanged
+"""
