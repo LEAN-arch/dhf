@@ -417,7 +417,7 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
     
     reviews_data = ssm.get_data("design_reviews", "reviews")
     
-    # FIX: Use a deep copy of the action items for the burndown chart to prevent session state mutation.
+    # FIX: Use a deep copy of the action items to prevent session state mutation.
     action_items_for_burndown = []
     for review in copy.deepcopy(reviews_data):
         review_date = pd.to_datetime(review.get('date'))
@@ -473,27 +473,31 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
         st.metric(label="Overdue Action Items", value=overdue_actions_count, delta=overdue_actions_count, delta_color="inverse", help="Total number of action items from all design reviews that are past their due date.")
     st.divider()
     st.subheader("Action Item Burn-down (Last 30 Days)")
+    # FIX: Pass the deep-copied and enhanced list to the burndown logic
     burndown_df_source = get_cached_df(action_items_for_burndown)
     if not burndown_df_source.empty:
         df = burndown_df_source.copy()
+        # FIX: Ensure all date columns are consistently converted to datetime objects
         df['created_date'] = pd.to_datetime(df['review_date']) + pd.to_timedelta(np.random.randint(0, 2, len(df)), unit='d')
         df['due_date'] = pd.to_datetime(df['due_date'], errors='coerce')
+        df['completion_date'] = pd.NaT 
+        
         completed_mask = df['status'] == 'Completed'
-        completed_items = df[completed_mask].copy()
-        if not completed_items.empty:
-            lifespan = (completed_items['due_date'] - completed_items['created_date']).dt.days
-            lifespan = lifespan.apply(lambda d: max(1, d if pd.notna(d) else 1))
+        if completed_mask.any():
+            completed_items = df[completed_mask]
+            lifespan = (completed_items['due_date'] - completed_items['created_date']).dt.days.fillna(1).astype(int)
+            lifespan = lifespan.apply(lambda d: max(1, d))
             completion_days = [np.random.randint(1, d + 1) for d in lifespan]
-            completed_items['completion_date'] = completed_items['created_date'] + pd.to_timedelta(completion_days, unit='d')
-            df.loc[completed_mask, 'completion_date'] = completed_items['completion_date']
-        else: df['completion_date'] = pd.NaT
+            df.loc[completed_mask, 'completion_date'] = completed_items['created_date'] + pd.to_timedelta(completion_days, unit='d')
+
         today = pd.to_datetime('today'); date_range = pd.date_range(end=today, periods=30, freq='D')
         daily_open_counts = []
         for day in date_range:
-            created_on_or_before = df[df['created_date'] <= day]
-            completed_on_or_before = df[df['completion_date'].notna() & (df['completion_date'] <= day)]
-            net_open = len(created_on_or_before) - len(completed_on_or_before)
+            created_on_or_before = df['created_date'] <= day
+            completed_on_or_before = df['completion_date'].notna() & (df['completion_date'] <= day)
+            net_open = created_on_or_before.sum() - completed_on_or_before.sum()
             daily_open_counts.append(net_open)
+        
         burndown_df = pd.DataFrame({'date': date_range, 'open_items': daily_open_counts})
         fig = go.Figure(); fig.add_trace(go.Scatter(x=burndown_df['date'], y=burndown_df['open_items'], mode='lines+markers', name='Open Items', fill='tozeroy', line=dict(color='rgb(0,100,80)'), hovertemplate='<b>%{x|%Y-%m-%d}</b><br>Open Items: %{y}<extra></extra>'))
         fig.update_layout(title="Trend of Total Open Action Items", yaxis_title="Number of Open Items", height=300); st.plotly_chart(fig, use_container_width=True)
@@ -778,8 +782,7 @@ def render_compliance_guide_tab():
             _, img_col, _ = st.columns([1, 2, 1])
             img_col.image(v_model_image_path, caption="The V-Model illustrates the relationship between design decomposition and integration/testing.", width=600)
         else:
-            st.error(f"Image Not Found: Ensure `v_model_diagram.png` is in the `dhf_dashboard` directory.", icon="🚨")
-            logger.warning(f"Could not find v_model_diagram.png at path: {v_model_image_path}")
+            st.error(f"Image Not Found: Ensure `v_model_diagram.png` is in the `dhf_dashboard` directory.", icon="🚨"); logger.warning(f"Could not find v_model_diagram.png at path: {v_model_image_path}")
     except Exception as e: st.error("An error occurred while trying to display the V-Model image."); logger.error(f"Error loading V-Model image: {e}", exc_info=True)
     col1, col2 = st.columns(2)
     with col1: st.subheader("Left Side: Decomposition & Design"); st.markdown("- **User Needs & Intended Use:** What problem does the user need to solve?\n- **Design Inputs (Requirements):** How must the device perform to meet those needs? This includes technical, functional, and safety requirements.\n- **System & Architectural Design:** How will the components be structured to meet the requirements?\n- **Detailed Design (Outputs):** At the lowest level, these are the final drawings, code, and specifications that are used to build the device.")
