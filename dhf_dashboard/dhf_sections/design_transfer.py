@@ -1,12 +1,37 @@
 # File: dhf_dashboard/dhf_sections/design_transfer.py
+# --- Enhanced Version ---
+"""
+Renders the Design Transfer section of the DHF dashboard.
 
-import streamlit as st
+This module provides the UI for documenting the activities required to transfer
+the final, validated design to manufacturing, as specified by 21 CFR 820.30(h).
+"""
+
+# --- Standard Library Imports ---
+import logging
+from typing import Any, Dict, List
+
+# --- Third-party Imports ---
 import pandas as pd
+import streamlit as st
+
+# --- Local Application Imports ---
 from ..utils.session_state_manager import SessionStateManager
 
-def render_design_transfer(ssm: SessionStateManager):
+# --- Setup Logging ---
+logger = logging.getLogger(__name__)
+
+
+def render_design_transfer(ssm: SessionStateManager) -> None:
     """
-    Renders the Design Transfer section of the DHF.
+    Renders the UI for the Design Transfer section.
+
+    This function displays an editable table for tracking all activities
+    required to ensure the design is correctly translated into production
+    specifications, forming the basis of the Device Master Record (DMR).
+
+    Args:
+        ssm (SessionStateManager): The session state manager to access DHF data.
     """
     st.header("9. Design Transfer")
     st.markdown("""
@@ -19,44 +44,117 @@ def render_design_transfer(ssm: SessionStateManager):
     """)
     st.info("Changes made here are saved automatically. Track all activities required to make the design manufacturable.", icon="ℹ️")
 
+    try:
+        # --- 1. Load Data ---
+        transfer_data: List[Dict[str, Any]] = ssm.get_data("design_transfer", "activities")
+        activities_df = pd.DataFrame(transfer_data)
+        logger.info(f"Loaded {len(activities_df)} design transfer activities.")
+
+        # --- 2. Display Data Editor ---
+        st.subheader("Transfer Activities and Checklist")
+        st.markdown("Track activities for transferring the complete combination product design to production. These activities and their outputs (procedures, specs) will form the basis of the Device Master Record (DMR).")
+
+        edited_df = st.data_editor(
+            activities_df,
+            num_rows="dynamic",
+            use_container_width=True,
+            key="design_transfer_editor",
+            column_config={
+                "activity": st.column_config.TextColumn(
+                    "Transfer Activity / Document",
+                    help="e.g., 'Finalize Device Master Record (DMR)', 'Validate automated assembly line', 'Qualify drug substance supplier', 'Process Validation (IQ/OQ/PQ)'.",
+                    required=True,
+                    width="large"
+                ),
+                "responsible_party": st.column_config.TextColumn(
+                    "Responsible Dept/Party",
+                    help="e.g., 'Manufacturing Eng.', 'Quality Assurance', 'Supply Chain'."
+                ),
+                "status": st.column_config.SelectboxColumn(
+                    "Status",
+                    options=["Not Started", "In Progress", "Completed", "On Hold"],
+                    required=True
+                ),
+                "completion_date": st.column_config.DateColumn(
+                    "Date Completed",
+                    format="YYYY-MM-DD"
+                ),
+                "evidence_link": st.column_config.TextColumn(
+                    "Link to Evidence",
+                    help="Filename or hyperlink to the procedure, report, or record providing evidence of completion."
+                ),
+            },
+            hide_index=True
+        )
+
+        # --- 3. Persist Updated Data ---
+        updated_records = edited_df.to_dict('records')
+
+        if updated_records != transfer_data:
+            ssm.update_data(updated_records, "design_transfer", "activities")
+            logger.info("Design transfer data updated in session state.")
+            st.toast("Design transfer activities saved!", icon="✅")
+
+    except Exception as e:
+        st.error("An error occurred while displaying the Design Transfer section. The data may be malformed.")
+        logger.error(f"Failed to render design transfer: {e}", exc_info=True)
+
+
+# ==============================================================================
+# --- UNIT TEST SCAFFOLDING (for `pytest`) ---
+# ==============================================================================
+"""
+import pytest
+from unittest.mock import MagicMock
+
+# To run tests, place this in a 'tests' directory and run pytest.
+# The rendering logic is refactored into testable functions.
+
+def load_transfer_activities(ssm: SessionStateManager) -> pd.DataFrame:
+    '''Refactored logic for testing: loads data into a DataFrame.'''
     transfer_data = ssm.get_data("design_transfer", "activities")
+    return pd.DataFrame(transfer_data)
 
-    st.subheader("Transfer Activities and Checklist")
-    st.markdown("Track activities for transferring the complete combination product design to production. This information will form the basis of the Device Master Record (DMR).")
+def save_transfer_activities(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    '''Refactored logic for testing: converts DataFrame back to records.'''
+    # This simple conversion is often all that's needed if there are no complex types.
+    return df.to_dict('records')
 
-    activities_df = pd.DataFrame(transfer_data)
+@pytest.fixture
+def mock_ssm_with_activities():
+    '''Mocks SessionStateManager with sample design transfer data.'''
+    ssm = MagicMock()
+    mock_data = [
+        {"activity": "Finalize DMR", "responsible_party": "QA", "status": "In Progress"},
+        {"activity": "Process Validation", "responsible_party": "Mfg Eng", "status": "Not Started"},
+    ]
+    ssm.get_data.return_value = mock_data
+    return ssm
 
-    edited_df = st.data_editor(
-        activities_df,
-        num_rows="dynamic",
-        use_container_width=True,
-        key="design_transfer_editor",
-        column_config={
-            "activity": st.column_config.TextColumn(
-                "Transfer Activity / Document",
-                help="e.g., 'Finalize Device Master Record (DMR)', 'Validate automated assembly line', 'Qualify drug substance supplier'.",
-                required=True,
-                width="large"
-            ),
-            "responsible_party": st.column_config.TextColumn(
-                "Responsible Dept/Party",
-                help="e.g., 'Manufacturing Eng.', 'Quality Assurance', 'Supply Chain'."
-            ),
-            "status": st.column_config.SelectboxColumn(
-                "Status",
-                options=["Not Started", "In Progress", "Completed", "On Hold"],
-                required=True
-            ),
-            "completion_date": st.column_config.DateColumn(
-                "Date Completed",
-                format="YYYY-MM-DD"
-            ),
-            "evidence_link": st.column_config.TextColumn(
-                "Link to Evidence",
-                help="Filename or link to the procedure, report, or record."
-            ),
-        },
-    )
+def test_load_transfer_activities(mock_ssm_with_activities):
+    '''Tests that the data is correctly loaded into a DataFrame.'''
+    df = load_transfer_activities(mock_ssm_with_activities)
+    assert not df.empty
+    assert len(df) == 2
+    assert "Finalize DMR" in df['activity'].values
 
-    # Persist the updated data back to the session state
-    ssm.update_data(edited_df.to_dict('records'), "design_transfer", "activities")
+def test_load_empty_activities():
+    '''Tests handling of an empty list of activities.'''
+    ssm = MagicMock()
+    ssm.get_data.return_value = []
+    df = load_transfer_activities(ssm)
+    assert df.empty
+
+def test_save_edited_activities():
+    '''Tests the conversion from an edited DataFrame back to a list of dicts.'''
+    edited_df = pd.DataFrame([
+        {"activity": "Finalize DMR", "responsible_party": "QA", "status": "Completed"}, # Status changed
+        {"activity": "New Activity", "responsible_party": "RA", "status": "Not Started"}, # New row added
+    ])
+
+    saved_data = save_transfer_activities(edited_df)
+    assert isinstance(saved_data, list)
+    assert len(saved_data) == 2
+    assert saved_data[0]['status'] == "Completed"
+    assert saved_data[1]['activity'] == "New Activity"
+"""
