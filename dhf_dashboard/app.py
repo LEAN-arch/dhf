@@ -754,3 +754,9 @@ def main() -> None:
 - **Verification (Horizontal Arrows):** Answers the question, **"Are we building the product right?"** It is the process of confirming that a design output meets its specified input requirements (e.g., does the code correctly implement the detailed design?).
 - **Validation (Top-Level Arrow):** Answers the question, **"Are we building the right product?"** It is the process of confirming that the final, finished product meets the user's actual needs and its intended use.""")
 
+
+# ==============================================================================
+# --- SCRIPT EXECUTION ---
+# ==============================================================================
+if __name__ == "__main__":
+    main()
