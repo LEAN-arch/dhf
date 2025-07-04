@@ -833,10 +833,15 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
                 model = ols('measurement ~ C(part) + C(operator) + C(part):C(operator)', data=df).fit()
                 anova_table = sm.stats.anova_lm(model, typ=2)
                 
+                # --- BUG FIX: Standardize column names to be case-insensitive ---
+                anova_table.columns = [col.lower() for col in anova_table.columns]
+
+                # Access columns using standardized lowercase names
                 ms_operator = anova_table.loc['C(operator)', 'mean_sq']
                 ms_part = anova_table.loc['C(part)', 'mean_sq']
                 ms_interact = anova_table.loc['C(part):C(operator)', 'mean_sq']
                 ms_error = anova_table.loc['Residual', 'mean_sq']
+                
                 n_parts, n_ops = df['part'].nunique(), df['operator'].nunique()
                 n_reps = len(df) / (n_parts * n_ops) if (n_parts * n_ops) > 0 else 0
 
