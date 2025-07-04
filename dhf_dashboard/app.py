@@ -416,19 +416,27 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
         initial_rpn_sum = hazards_df['initial_rpn'].sum(); final_rpn_sum = hazards_df['final_rpn'].sum()
         risk_reduction_pct = ((initial_rpn_sum - final_rpn_sum) / initial_rpn_sum) * 100 if initial_rpn_sum > 0 else 100
         risk_score = max(0, risk_reduction_pct)
+    
     reviews_data = ssm.get_data("design_reviews", "reviews")
-    action_items = []
+    # FIX: Use a deep copy of the action items for the burndown chart to prevent session state mutation.
+    action_items_for_burndown = []
     for review in reviews_data:
         review_date = pd.to_datetime(review.get('date'))
-        for item in review.get('action_items', []):
-            item['review_date'] = review_date
-            action_items.append(item)
-    action_items_df = get_cached_df(action_items); execution_score = 100
+        for item_data in review.get('action_items', []):
+            item_with_date = item_data.copy()
+            item_with_date['review_date'] = review_date
+            action_items_for_burndown.append(item_with_date)
+            
+    original_action_items = [item for r in reviews_data for item in r.get("action_items", [])]
+    action_items_df = get_cached_df(original_action_items)
+    
+    execution_score = 100
     if not action_items_df.empty:
         open_items = action_items_df[action_items_df['status'] != 'Completed']
         if not open_items.empty:
             overdue_items_count = len(open_items[open_items['status'] == 'Overdue'])
             execution_score = (1 - (overdue_items_count / len(open_items))) * 100
+
     weights = {'schedule': 0.4, 'quality': 0.4, 'execution': 0.2}
     overall_health_score = (schedule_score * weights['schedule']) + (risk_score * weights['quality']) + (execution_score * weights['execution'])
     ver_tests_df = get_cached_df(ssm.get_data("design_verification", "tests")); val_studies_df = get_cached_df(ssm.get_data("design_validation", "studies"))
@@ -467,23 +475,27 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
         st.metric(label="Overdue Action Items", value=overdue_actions_count, delta=overdue_actions_count, delta_color="inverse", help="Total number of action items from all design reviews that are past their due date.")
     st.divider()
     st.subheader("Action Item Burn-down (Last 30 Days)")
-    if not action_items_df.empty:
-        df = action_items_df.copy()
+    # FIX: Pass the copied and enhanced list to the burndown logic
+    burndown_df_source = get_cached_df(action_items_for_burndown)
+    if not burndown_df_source.empty:
+        df = burndown_df_source.copy()
         df['created_date'] = pd.to_datetime(df['review_date']) + pd.to_timedelta(np.random.randint(0, 2, len(df)), unit='d')
+        df['due_date'] = pd.to_datetime(df['due_date'], errors='coerce')
         completed_mask = df['status'] == 'Completed'
         completed_items = df[completed_mask].copy()
         if not completed_items.empty:
-            lifespan = (pd.to_datetime(completed_items['due_date']) - completed_items['created_date']).dt.days
-            completion_days = [np.random.randint(1, max(2, int(d))) for d in lifespan]
+            lifespan = (completed_items['due_date'] - completed_items['created_date']).dt.days
+            lifespan = lifespan.apply(lambda d: max(1, d))
+            completion_days = [np.random.randint(1, d + 1) for d in lifespan]
             completed_items['completion_date'] = completed_items['created_date'] + pd.to_timedelta(completion_days, unit='d')
             df.loc[completed_mask, 'completion_date'] = completed_items['completion_date']
         else: df['completion_date'] = pd.NaT
         today = pd.to_datetime('today'); date_range = pd.date_range(end=today, periods=30, freq='D')
         daily_open_counts = []
         for day in date_range:
-            created_before_day = df[df['created_date'] <= day]
-            completed_on_or_before_day = df[df['completion_date'] <= day]
-            net_open = len(created_before_day) - len(completed_on_or_before_day)
+            created_on_or_before = df[df['created_date'] <= day]
+            completed_on_or_before = df[df['completion_date'] <= day]
+            net_open = len(created_on_or_before) - len(completed_on_or_before)
             daily_open_counts.append(net_open)
         burndown_df = pd.DataFrame({'date': date_range, 'open_items': daily_open_counts})
         fig = go.Figure(); fig.add_trace(go.Scatter(x=burndown_df['date'], y=burndown_df['open_items'], mode='lines+markers', name='Open Items', fill='tozeroy', line=dict(color='rgb(0,100,80)'), hovertemplate='<b>%{x|%Y-%m-%d}</b><br>Open Items: %{y}<extra></extra>'))
@@ -773,6 +785,7 @@ def render_compliance_guide_tab():
     st.success("""#### The Core Principle: Verification vs. Validation
 - **Verification (Horizontal Arrows):** Answers the question, **"Are we building the product right?"** It is the process of confirming that a design output meets its specified input requirements (e.g., does the code correctly implement the detailed design?).
 - **Validation (Top-Level Arrow):** Answers the question, **"Are we building the right product?"** It is the process of confirming that the final, finished product meets the user's actual needs and its intended use.""")
+
 
 # ==============================================================================
 # --- MAIN APPLICATION LOGIC ---
