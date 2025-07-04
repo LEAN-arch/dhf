@@ -418,7 +418,6 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
     
     reviews_data = ssm.get_data("design_reviews", "reviews")
     
-    # FIX: Use a deep copy of the action items to prevent session state mutation.
     action_items_for_burndown = []
     if reviews_data:
         for review in copy.deepcopy(reviews_data):
@@ -478,7 +477,6 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
     burndown_df_source = get_cached_df(action_items_for_burndown)
     if not burndown_df_source.empty:
         df = burndown_df_source.copy()
-        # FIX: Ensure all date columns are consistently converted to datetime objects
         df['created_date'] = pd.to_datetime(df['review_date']) + pd.to_timedelta(np.random.randint(0, 2, len(df)), unit='d')
         df['due_date'] = pd.to_datetime(df['due_date'], errors='coerce')
         df['completion_date'] = pd.NaT 
@@ -706,7 +704,6 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
 
         @st.cache_data
         def generate_and_train_quality_model():
-            """Generates synthetic quality data and trains a Random Forest model."""
             np.random.seed(42); n_samples = 500
             data = {'temperature': np.random.normal(90, 5, n_samples), 'pressure': np.random.normal(300, 20, n_samples), 'viscosity': np.random.normal(50, 3, n_samples)}
             df = pd.DataFrame(data)
@@ -743,13 +740,10 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
             explainer = shap.TreeExplainer(model)
             shap_values = explainer.shap_values(X_test)
             
-            # --- DEFINITIVE FIX ---
-            # 1. Calculate the mean absolute SHAP values for the "Fail" class (class 1)
             mean_abs_shap = np.abs(shap_values[1]).mean(axis=0)
             feature_names = X_test.columns
             importance_df = pd.DataFrame({'feature': feature_names, 'importance': mean_abs_shap}).sort_values('importance', ascending=True)
             
-            # 2. Plot the results using Plotly Express for robustness and better aesthetics
             fig = px.bar(importance_df, x='importance', y='feature', orientation='h',
                          title="Average Impact on Model Output")
             fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10), yaxis_title=None, xaxis_title="Mean Absolute SHAP Value")
@@ -758,7 +752,6 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
         st.subheader("Deep Dive: How Feature Values Drive Failure")
         st.markdown("The plot below shows each individual prediction from the test set. Red dots are high feature values, blue are low. For `temperature`, you can see high (red) values push the prediction towards failure (positive SHAP value), while low (blue) values push it towards passing.")
         
-        # This is the "beeswarm" plot, which needs the same single-class SHAP values but uses the original function.
         fig_shap_summary, ax_shap_summary = plt.subplots()
         shap.summary_plot(shap_values[1], X_test, show=False, plot_size=(10, 4))
         ax_shap_summary.set_xlabel("SHAP value (impact on model output towards 'Fail')")
@@ -825,6 +818,7 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
 
         else:
             st.info("Not enough historical data (e.g., tasks marked 'At Risk') to train a predictive model yet.")
+
 
 def render_compliance_guide_tab():
     """Renders the static educational content for the QE & Compliance Guide tab."""
