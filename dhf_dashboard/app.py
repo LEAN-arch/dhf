@@ -662,7 +662,7 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
     with tool_tabs[0]: # SPC
         st.subheader("Statistical Process Control (SPC) with Rule Checking")
         st.markdown("Monitor process stability by distinguishing natural variation from signals that require investigation.")
-        with st.expander("The 'Why' and the 'How'"):
+        with st.expander("The Purpose, Math Basis, Procedure, and Significance"):
             # --- EXPANDED EXPLANATION ---
             st.markdown("#### Purpose: Control and Monitor a Process")
             st.markdown("The primary purpose of SPC is to monitor a process over time to ensure it remains stable and predictable, operating within its natural limits. It helps distinguish between **common cause variation** (the natural, inherent 'noise' of a process) and **special cause variation** (unexpected, external factors that signal a process change or problem). By reacting only to special causes, we avoid over-adjusting the process and making things worse.")
@@ -702,7 +702,7 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
     with tool_tabs[1]: # Hypothesis Testing
         st.subheader("Hypothesis Testing with Assumption Checks")
         st.markdown("Rigorously determine if a statistically significant difference exists between two groups (e.g., Supplier A vs. Supplier B).")
-        with st.expander("The 'Why' and the 'How'"):
+        with st.expander("The Purpose, Math Basis, Procedure, and Significance"):
             # --- EXPANDED EXPLANATION ---
             st.markdown("#### Purpose: Make Decisions Under Uncertainty")
             st.markdown("Hypothesis testing provides a formal framework for comparing groups or testing claims about a population based on sample data. It's used to make objective, data-driven decisions instead of relying on intuition. For example, it can determine if a new manufacturing process is truly better than the old one, or if a change in supplier has a significant impact on product performance.")
@@ -714,6 +714,7 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
             st.markdown("We compare the p-value to a pre-defined significance level, called **alpha (α)**, which is typically set to 0.05.\n- **`p < α` (e.g., p < 0.05):** The result is **statistically significant**. We **reject the null hypothesis** because our observed data is very unlikely to have occurred by random chance alone. We conclude in favor of the alternative hypothesis (i.e., a difference exists).\n- **`p ≥ α` (e.g., p ≥ 0.05):** The result is **not statistically significant**. We **fail to reject the null hypothesis**. This does *not* prove the null is true, but rather that we lack sufficient evidence to claim a difference exists.")
         try:
             ht_data = ssm.get_data("quality_system", "hypothesis_testing_data")
+            # --- FALLBACK DATA ---
             if not ht_data:
                 st.info("Displaying example data. To use your own, ensure 'hypothesis_testing_data' is in the data model.", icon="ℹ️")
                 rng = np.random.default_rng(0)
@@ -746,7 +747,7 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
     with tool_tabs[2]: # Pareto Analysis
         st.subheader("Pareto Analysis of FMEA Risk")
         st.markdown("Applies the 80/20 rule to FMEA data to identify the 'vital few' failure modes that drive the majority of risk, enabling focused mitigation efforts.")
-        with st.expander("The 'Why' and the 'How'"):
+        with st.expander("The Purpose, Math Basis, Procedure, and Significance"):
             # --- EXPANDED EXPLANATION ---
             st.markdown("#### Purpose: Prioritize Efforts for Maximum Impact")
             st.markdown("Pareto Analysis is a simple but powerful decision-making tool based on the **Pareto Principle**, also known as the 80/20 rule. This principle states that for many events, roughly 80% of the effects come from 20% of the causes. In quality engineering, this means that a small number of failure modes (the 'vital few') are typically responsible for the majority of the risk or defects. The purpose of the analysis is to identify these vital few so that corrective actions can be focused where they will have the greatest impact.")
@@ -771,7 +772,7 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
     with tool_tabs[3]: # Design of Experiments
         st.subheader("Design of Experiments (DOE) with ANOVA")
         st.markdown("Efficiently determine which process inputs (**factors**) and their interactions significantly impact a key output (**response**).")
-        with st.expander("The 'Why' and the 'How'"):
+        with st.expander("The Purpose, Math Basis, Procedure, and Significance"):
             # --- EXPANDED EXPLANATION ---
             st.markdown("#### Purpose: Understand and Optimize Processes")
             st.markdown("Design of Experiments (DOE) is a structured statistical method for efficiently determining the relationship between factors affecting a process and the output of that process. Its purpose is to move beyond 'one-factor-at-a-time' (OFAT) testing, which is inefficient and cannot detect **interactions** (where the effect of one factor depends on the level of another). DOE allows you to screen for significant factors, build a mathematical model of your process, and find the optimal settings to improve performance and robustness.")
