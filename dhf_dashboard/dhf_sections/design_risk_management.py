@@ -82,7 +82,7 @@ def render_design_risk_management(ssm: SessionStateManager) -> None:
         # Prepare list of risk control requirements for the traceability dropdown
         inputs_data: List[Dict[str, Any]] = ssm.get_data("design_inputs", "requirements")
         risk_control_reqs = [req for req in inputs_data if req.get('is_risk_control')]
-        risk_control_ids: List[str] = [""] + [req.get('id', '') for req in risk_control_reqs]
+        risk_control_ids: List[str] = [""] + [req.get('id', '') for req in risk_control_reqs if req.get('id')]
         logger.debug(f"Populated risk control dropdown with: {risk_control_ids}")
 
         # --- 2. Hazard Analysis Section ---
@@ -145,61 +145,3 @@ def render_design_risk_management(ssm: SessionStateManager) -> None:
     except Exception as e:
         st.error("An error occurred while displaying the Risk Management section. The data may be malformed.")
         logger.error(f"Failed to render design risk management: {e}", exc_info=True)
-
-
-# ==============================================================================
-# --- UNIT TEST SCAFFOLDING (for `pytest`) ---
-# ==============================================================================
-"""
-import pytest
-
-# from dhf_dashboard.dhf_sections.design_risk_management import get_risk_level
-
-@pytest.mark.parametrize("severity, probability, expected", [
-    (1, 1, "Low"),
-    (3, 3, "Medium"),
-    (5, 5, "High"),
-    (5, 2, "High"),
-    (2, 5, "High"),
-    (3, 1, "Low"),
-    (pd.NA, 5, "N/A"),
-    (5, pd.NA, "N/A"),
-    (None, 5, "N/A"),
-    (6, 1, "N/A"), # Out of bounds
-    (1, 6, "N/A"), # Out of bounds
-    ('a', 1, "N/A"), # Invalid type
-])
-def test_get_risk_level(severity, probability, expected):
-    '''Tests the risk level calculation logic with various inputs.'''
-    assert get_risk_level(severity, probability) == expected
-
-def test_risk_recalculation_on_edit():
-    '''
-    Simulates a user edit in the DataFrame and tests if the risk level
-    is correctly recalculated.
-    '''
-    # 1. Initial DataFrame
-    initial_df = pd.DataFrame([{
-        'hazard_id': 'H-001',
-        'initial_S': 3,
-        'initial_O': 3,
-        'final_S': 1,
-        'final_O': 1
-    }])
-    initial_df['initial_risk_level'] = initial_df.apply(lambda r: get_risk_level(r['initial_S'], r['initial_O']), axis=1)
-    initial_df['final_risk_level'] = initial_df.apply(lambda r: get_risk_level(r['final_S'], r['final_O']), axis=1)
-    
-    assert initial_df.loc[0, 'initial_risk_level'] == 'Medium'
-    assert initial_df.loc[0, 'final_risk_level'] == 'Low'
-
-    # 2. Simulate user edit (e.g., from a data_editor)
-    edited_df = initial_df.copy()
-    edited_df.loc[0, 'initial_S'] = 5 # User increases initial severity
-    
-    # 3. Recalculate based on the edited data
-    edited_df['initial_risk_level'] = edited_df.apply(lambda r: get_risk_level(r['initial_S'], r['initial_O']), axis=1)
-
-    # 4. Assert the change
-    assert edited_df.loc[0, 'initial_risk_level'] == 'High'
-    assert edited_df.loc[0, 'final_risk_level'] == 'Low' # Final risk should be unchanged
-"""
