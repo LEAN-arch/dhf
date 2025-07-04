@@ -86,7 +86,6 @@ def _create_definitive_dhf_model(version: int) -> Dict[str, Any]:
                 {"id": "PROTO-001", "title": "Biocompatibility Test Protocol", "phase": "Verification & Validation", "status": "Draft", "linked_input_id": "RC-002"},
             ]
         },
-        # REALISTIC DATA FIX: Overhauled design reviews to create a real burndown story
         "design_reviews": {
             "reviews": [
                 {
@@ -182,7 +181,7 @@ class SessionStateManager:
     Handles the initialization and access of the application's session state.
     """
     _DHF_DATA_KEY = "dhf_data"
-    _CURRENT_DATA_VERSION = 22 # Incremented to reflect new data model
+    _CURRENT_DATA_VERSION = 23 # Incremented to reflect new data model
 
     def __init__(self):
         """
@@ -195,9 +194,6 @@ class SessionStateManager:
             st.session_state[self._DHF_DATA_KEY] = _create_definitive_dhf_model(self._CURRENT_DATA_VERSION)
 
     def get_data(self, primary_key: str, secondary_key: Optional[str] = None) -> Any:
-        """
-        Safely retrieves data from the session state.
-        """
         try:
             data_store = st.session_state[self._DHF_DATA_KEY]
             if secondary_key:
@@ -209,14 +205,10 @@ class SessionStateManager:
             return {} if secondary_key is None else []
 
     def update_data(self, data: Any, primary_key: str, secondary_key: Optional[str] = None) -> None:
-        """
-        Updates data in the session state.
-        """
         if secondary_key:
             if primary_key not in st.session_state[self._DHF_DATA_KEY]:
                 st.session_state[self._DHF_DATA_KEY][primary_key] = {}
             st.session_state[self._DHF_DATA_KEY][primary_key][secondary_key] = data
-            logger.info(f"Session state updated for key path: {primary_key}.{secondary_key}")
         else:
             st.session_state[self._DHF_DATA_KEY][primary_key] = data
-            logger.info(f"Session state updated for key: {primary_key}")
+        logger.info(f"Session state updated for {primary_key}.{secondary_key if secondary_key else ''}")
