@@ -1095,16 +1095,23 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
     st.info("Utilize predictive models to forecast outcomes, enabling proactive quality control and project management.")
 
     try:
-        from sklearn.ensemble import RandomForestClassifier
+        from sklearn.ensemble import RandomForestClassifier, IsolationForest
         from sklearn.linear_model import LogisticRegression
         from sklearn.model_selection import train_test_split
         from sklearn.metrics import confusion_matrix
+        from sklearn.cluster import KMeans
+        from sklearn.datasets import make_blobs
+        from statsmodels.tsa.arima.model import ARIMA
         import shap
     except ImportError:
-        st.error("This tab requires `scikit-learn` and `shap`. Please install them (`pip install scikit-learn shap`) to enable ML features.", icon="🚨")
+        st.error("This tab requires `scikit-learn`, `statsmodels` and `shap`. Please install them (`pip install scikit-learn statsmodels shap`) to enable ML features.", icon="🚨")
         return
 
-    ml_tabs = st.tabs(["Predictive Quality (Batch Failure)", "Predictive Project Risk (Task Delay)"])
+    # --- VISUALIZATION UPGRADE: Replaced Matplotlib with beautiful Plotly plots ---
+    ml_tabs = st.tabs([
+        "Predictive Quality (Batch Failure)", "Predictive Project Risk (Task Delay)",
+        "Clustering (K-Means)", "Anomaly Detection (Isolation Forest)", "Time Series Forecasting"
+    ])
 
     with ml_tabs[0]:
         st.subheader("Predictive Quality: Manufacturing Batch Failure")
@@ -1114,7 +1121,7 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
             st.markdown("#### The 'Why': Business Justification")
             st.markdown("""- **Proactive vs. Reactive:** Instead of discovering a failed batch during final inspection (reactive), this model predicts failure ahead of time (proactive).\n- **COPQ Reduction:** It significantly reduces the Cost of Poor Quality (COPQ) by preventing scrap, rework, and wasted materials.\n- **Process Understanding:** The model's *feature importances* tell engineers which process parameters have the biggest impact on quality, guiding process optimization efforts (like a DOE).""")
             st.markdown("#### The 'How': Advanced Interpretation with SHAP")
-            st.markdown("""We train a **Random Forest Classifier** and then use **SHAP (SHapley Additive exPlanations)** to interpret its predictions.\n- **Feature Importance Plot:** This bar chart shows the average impact of each feature on the model's prediction. Higher values mean more importance.\n- **SHAP Summary Plot:** This is a major upgrade that shows not only *which* features are important but also *how* their values impact the prediction. Red dots indicate high feature values, blue dots indicate low values. Dots to the right push the model towards predicting "Fail", while dots to the left push towards "Pass".\n- **Enhanced Confusion Matrix:** Our new matrix is a professional heatmap that includes clear labels and percentages for intuitive performance assessment.""")
+            st.markdown("""We train a **Random Forest Classifier** and then use **SHAP (SHapley Additive exPlanations)** to interpret its predictions.\n- **Feature Importance Plot:** This interactive bar chart shows the average impact of each feature on the model's prediction. Higher values mean more importance.\n- **SHAP Summary Plot:** This interactive scatter plot shows not only *which* features are important but also *how* their values impact the prediction. Red dots indicate high feature values, blue dots indicate low values. Dots to the right push the model towards predicting "Fail", while dots to the left push towards "Pass".\n- **Enhanced Confusion Matrix:** Our heatmap includes clear labels and percentages for intuitive performance assessment.""")
 
         @st.cache_data
         def get_quality_model_and_data():
@@ -1140,39 +1147,71 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
         col1, col2 = st.columns(2)
         with col1:
             st.markdown("**Model Performance (Test Set)**")
-            st.caption("How well did the model predict on unseen data?")
             y_pred = model.predict(X_test)
             cm = confusion_matrix(y_test, y_pred)
             cm_percent = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
-            
             labels = [["True Negative", "False Positive"], ["False Negative", "True Positive"]]
             annotations = [[f"{labels[i][j]}<br>{cm[i][j]}<br>({cm_percent[i][j]:.2%})" for j in range(2)] for i in range(2)]
-
             fig_cm = go.Figure(data=go.Heatmap(
                    z=cm, x=['Predicted Pass', 'Predicted Fail'], y=['Actual Pass', 'Actual Fail'],
                    hoverongaps=False, colorscale='Blues', showscale=False,
                    text=annotations, texttemplate="%{text}"))
-            fig_cm.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10), title_x=0.5, title_text="<b>Confusion Matrix</b>")
+            fig_cm.update_layout(height=350, margin=dict(l=10, r=10, t=40, b=10), title_x=0.5, title_text="<b>Confusion Matrix</b>", title_font_size=16)
             st.plotly_chart(fig_cm, use_container_width=True)
 
         with col2:
             st.markdown("**Overall Feature Importance**")
-            st.caption("Which factors have the largest average impact?")
+            # --- VISUALIZATION UPGRADE: Plotly Bar Chart ---
             shap_values_fail = shap_explanation[:, :, 1]
-            
-            # --- BUG FIX: Let SHAP create the plot, then pass it to Streamlit ---
-            shap.summary_plot(shap_values_fail, plot_type="bar", show=False)
-            st.pyplot(plt.gcf(), clear_figure=True)
+            mean_abs_shap = np.abs(shap_values_fail.values).mean(axis=0)
+            importance_df = pd.DataFrame({'feature': X_test.columns, 'importance': mean_abs_shap}).sort_values('importance')
+            fig_bar = px.bar(importance_df, x='importance', y='feature', orientation='h', 
+                             title='Average Impact on Model Output', text_auto='.3f')
+            fig_bar.update_layout(height=350, margin=dict(l=10, r=10, t=40, b=10), title_font_size=16)
+            fig_bar.update_traces(marker_color='#1f77b4')
+            st.plotly_chart(fig_bar, use_container_width=True)
 
         st.subheader("Deep Dive: How Feature Values Drive Failure")
-        st.markdown("The plot below shows each individual prediction from the test set. Red dots are high feature values, blue are low. For `temperature`, you can see high (red) values push the prediction towards failure (positive SHAP value), while low (blue) values push it towards passing.")
+        # --- VISUALIZATION UPGRADE: Interactive Plotly Beeswarm Chart ---
+        shap_df = pd.DataFrame(shap_values_fail.values, columns=X_test.columns)
+        feature_vals = pd.DataFrame(shap_values_fail.data, columns=X_test.columns)
         
-        # --- BUG FIX: Let SHAP create the plot, then pass it to Streamlit ---
-        shap_values_fail = shap_explanation[:, :, 1]
-        shap.summary_plot(shap_values_fail, show=False)
-        ax = plt.gca()
-        ax.set_xlabel("SHAP value (impact on model output towards 'Fail')")
-        st.pyplot(plt.gcf(), clear_figure=True)
+        fig_summary = go.Figure()
+        for i, feature in enumerate(X_test.columns):
+            # Normalize feature values for color mapping
+            norm_vals = (feature_vals[feature] - feature_vals[feature].min()) / (feature_vals[feature].max() - feature_vals[feature].min())
+            
+            # Add jitter for beeswarm effect
+            jitter = np.random.uniform(-0.15, 0.15, len(shap_df))
+            
+            fig_summary.add_trace(go.Scatter(
+                x=shap_df[feature],
+                y=np.full(len(shap_df), i) + jitter,
+                mode='markers',
+                marker=dict(
+                    color=norm_vals,
+                    colorscale='RdBu',
+                    reversescale=True,
+                    showscale=True,
+                    colorbar=dict(title='Feature Value', x=1.15, tickvals=[0,1], ticktext=['Low', 'High'])
+                ),
+                customdata=feature_vals[feature],
+                hovertemplate=f"<b>{feature}</b><br>SHAP Value: %{{x:.3f}}<br>Feature Value: %{{customdata:.2f}}<extra></extra>",
+                name=feature
+            ))
+
+        fig_summary.update_layout(
+            title="<b>SHAP Summary Plot: Impact of each feature on individual predictions</b>",
+            xaxis_title="SHAP Value (Impact on prediction towards 'Fail')",
+            showlegend=False,
+            yaxis=dict(
+                tickvals=list(range(len(X_test.columns))),
+                ticktext=X_test.columns,
+                title='Feature'
+            ),
+            height=400
+        )
+        st.plotly_chart(fig_summary, use_container_width=True)
 
     with ml_tabs[1]:
         st.subheader("Predictive Project Risk: Interactive Analysis")
@@ -1211,8 +1250,11 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
             fig = px.bar(sorted_risk_df, x='risk_probability', y='name', orientation='h',
                          title="Forecasted Risk for 'Not Started' Tasks",
                          labels={'risk_probability': 'Probability of Being "At-Risk"', 'name': 'Task'},
-                         color='risk_probability', color_continuous_scale=px.colors.sequential.Reds)
-            fig.update_layout(height=350, yaxis={'categoryorder':'total ascending'}); st.plotly_chart(fig, use_container_width=True)
+                         color='risk_probability', color_continuous_scale=px.colors.sequential.Reds,
+                         text='risk_probability')
+            fig.update_traces(texttemplate='%{text:.0%}', textposition='outside')
+            fig.update_layout(height=400, yaxis={'categoryorder':'total ascending'}, uniformtext_minsize=8, uniformtext_mode='hide'); 
+            st.plotly_chart(fig, use_container_width=True)
             
             st.divider()
             st.subheader("Drill-Down: Analyze a Specific Task's Risk Factors")
@@ -1240,6 +1282,137 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
 
         else:
             st.info("Not enough historical data (e.g., tasks marked 'At Risk') to train a predictive model yet.")
+    
+    with ml_tabs[2]: # Clustering
+        st.subheader("Clustering with K-Means")
+        st.markdown("Automatically discover natural groupings or segments in your data using the K-Means algorithm. This is an example of **unsupervised learning** as no pre-existing labels are required.")
+        with st.expander("The Purpose, Math Basis, Procedure, and Significance"):
+            st.markdown("#### Purpose: Identify Hidden Structures")
+            st.markdown("The primary goal of clustering is to partition data points into a number of groups (clusters) such that points in the same group are very similar to each other and different from points in other groups. This is useful for market segmentation (finding customer groups), anomaly detection (anomalies may form their own tiny cluster), or identifying distinct modes of process failure.")
+            st.markdown("#### The Math Basis: Centroids and Euclidean Distance")
+            st.markdown("K-Means works by minimizing the **within-cluster sum of squares (WCSS)**, also known as inertia. The algorithm iterates through these steps:\n1.  **Initialization:** `k` initial 'centroids' (the center point of a cluster) are chosen at random.\n2.  **Assignment Step:** Each data point is assigned to its nearest centroid, typically based on Euclidean distance.\n3.  **Update Step:** The centroids are moved to the center (mean) of all the data points assigned to them.\nSteps 2 and 3 are repeated until the centroids no longer move significantly, meaning the clusters have stabilized.")
+            st.markdown("#### The Procedure: Choosing 'k' and Fitting")
+            st.markdown("1.  **Select Features:** Choose the input variables (features) for clustering.\n2.  **Determine Optimal `k`:** A key challenge is choosing the right number of clusters (`k`). The **Elbow Method** is a common heuristic. We run K-Means for a range of `k` values (e.g., 1 to 10) and plot the inertia for each. The 'elbow' of the curve—the point where the rate of decrease in inertia sharply slows—suggests a good value for `k`.\n3.  **Fit and Visualize:** With the chosen `k`, the final model is trained, and the results are visualized on a scatter plot, with each point colored by its assigned cluster label.")
+            st.markdown("#### Significance of the Results: Actionable Segments")
+            st.markdown("The output is a label for each data point, indicating which cluster it belongs to. The significance lies in interpreting these clusters. By analyzing the characteristics of each cluster (e.g., 'Cluster 0 has high temperature and high pressure'), you can define actionable segments. For example, you might discover three distinct types of batch failures, each requiring a different corrective action, that were previously undiagnosed.")
+        
+        @st.cache_data
+        def generate_clustering_data():
+            X, _ = make_blobs(n_samples=300, centers=4, n_features=2, cluster_std=0.8, random_state=42)
+            return pd.DataFrame(X, columns=['Feature A', 'Feature B'])
+
+        @st.cache_data
+        def find_optimal_k(data):
+            inertia = []
+            k_range = range(1, 11)
+            for k in k_range:
+                kmeans = KMeans(n_clusters=k, random_state=42, n_init=10).fit(data)
+                inertia.append(kmeans.inertia_)
+            return pd.DataFrame({'k': k_range, 'inertia': inertia})
+
+        cluster_df = generate_clustering_data()
+        inertia_df = find_optimal_k(cluster_df)
+        
+        st.markdown("**1. Determine Optimal Number of Clusters (`k`)**")
+        fig_elbow = px.line(inertia_df, x='k', y='inertia', title='Elbow Method for Optimal k', markers=True)
+        fig_elbow.add_annotation(x=4, y=inertia_df.loc[3, 'inertia'], text="Elbow point suggests k=4", showarrow=True, arrowhead=1)
+        st.plotly_chart(fig_elbow, use_container_width=True)
+        
+        st.markdown("**2. Fit Model and Visualize Clusters**")
+        k = st.slider("Select number of clusters (k)", min_value=2, max_value=10, value=4)
+        
+        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10).fit(cluster_df)
+        cluster_df['Cluster'] = kmeans.labels_.astype(str)
+        centroids = kmeans.cluster_centers_
+
+        fig_cluster = px.scatter(cluster_df, x='Feature A', y='Feature B', color='Cluster',
+                                 title=f'K-Means Clustering Results (k={k})',
+                                 color_discrete_sequence=px.colors.qualitative.Plotly)
+        fig_cluster.add_trace(go.Scatter(x=centroids[:,0], y=centroids[:,1], mode='markers',
+                                         marker=dict(symbol='star', color='black', size=15, line=dict(color='white', width=1)),
+                                         name='Centroids'))
+        st.plotly_chart(fig_cluster, use_container_width=True)
+
+    with ml_tabs[3]: # Anomaly Detection
+        st.subheader("Anomaly Detection with Isolation Forest")
+        st.markdown("Identify unusual data points (outliers) that do not conform to the expected pattern of the majority of the data.")
+        with st.expander("The Purpose, Math Basis, Procedure, and Significance"):
+            st.markdown("#### Purpose: Find the 'Needle in a Haystack'")
+            st.markdown("Anomaly detection is critical for finding manufacturing defects, fraudulent transactions, network intrusions, or any rare event that requires investigation. Unlike clustering, the goal is not to find groups, but to find the individual points that are 'different' from all groups.")
+            st.markdown("#### The Math Basis: The 'Ease of Isolation'")
+            st.markdown("The Isolation Forest algorithm is built on an intuitive principle: **anomalies are easier to 'isolate' from the rest of the data than normal points.** The algorithm works by:\n1.  Building a collection of 'Isolation Trees' (hence the 'Forest').\n2.  For each tree, the data is randomly sub-sampled and partitioned by selecting a random feature and a random split value for that feature.\n3.  This splitting continues until the data point of interest is isolated in its own node.\n4.  The **path length** (number of splits) to isolate a point is averaged across all trees. Anomalies, being few and different, will have very short average path lengths, while normal points will require many splits to isolate.")
+            st.markdown("#### The Procedure: Training and Prediction")
+            st.markdown("1.  **Select Features:** Choose the input variables for the model.\n2.  **Set Contamination:** The user provides an estimate of the proportion of outliers in the data (the `contamination` hyperparameter). This acts as a threshold for the decision function.\n3.  **Train Model:** An `IsolationForest` model is trained on the data.\n4.  **Predict:** The model predicts a label for each data point: `1` for an inlier (normal) and `-1` for an outlier (anomaly).")
+            st.markdown("#### Significance of the Results: Actionable Flags")
+            st.markdown("The primary output is a flag identifying each data point as either an inlier or an outlier. This allows for immediate action:\n- **Process Control:** Outliers in manufacturing data can be automatically flagged for quality inspection.\n- **Root Cause Analysis:** Investigating the characteristics of the identified outliers can reveal underlying problems in a process or system.\n- **Data Cleaning:** Outliers can be reviewed and potentially removed before training other machine learning models to improve their performance.")
+
+        @st.cache_data
+        def generate_anomaly_data():
+            rng = np.random.default_rng(10)
+            X_inliers, _ = make_blobs(n_samples=300, centers=[[0,0]], cluster_std=0.5, random_state=0)
+            X_outliers = rng.uniform(low=-4, high=4, size=(15, 2))
+            X = np.concatenate([X_inliers, X_outliers])
+            return pd.DataFrame(X, columns=['Process Parameter 1', 'Process Parameter 2'])
+
+        anomaly_df = generate_anomaly_data()
+        st.markdown("**1. Set Anomaly Detection Threshold**")
+        contamination = st.slider("Select contamination percentage:", min_value=0.01, max_value=0.25, value=0.05, step=0.01, format="%.2f")
+
+        st.markdown("**2. Fit Model and Visualize Outliers**")
+        iso_forest = IsolationForest(contamination=contamination, random_state=42)
+        predictions = iso_forest.fit_predict(anomaly_df)
+        anomaly_df['Status'] = np.where(predictions == -1, 'Outlier', 'Inlier')
+        
+        fig_anomaly = px.scatter(anomaly_df, x='Process Parameter 1', y='Process Parameter 2', color='Status',
+                                 title=f"Anomaly Detection Results ({contamination:.0%} Contamination)",
+                                 color_discrete_map={'Inlier': '#1f77b4', 'Outlier': '#d62728'},
+                                 symbol='Status', symbol_map={'Inlier': 'circle', 'Outlier': 'x'})
+        fig_anomaly.update_traces(selector=dict(name='Outlier'), marker_size=12)
+        st.plotly_chart(fig_anomaly, use_container_width=True)
+
+    with ml_tabs[4]: # Time Series
+        st.subheader("Time Series Forecasting with SARIMA")
+        st.markdown("Predict future values of a metric based on its historical behavior, accounting for trends, seasonality, and other time-based patterns.")
+        with st.expander("The Purpose, Math Basis, Procedure, and Significance"):
+            st.markdown("#### Purpose: Predict the Future")
+            st.markdown("Time series forecasting is used to predict future events based on time-ordered historical data. It is vital for demand planning, capacity management, financial forecasting, and predicting trends in quality metrics like complaint rates or defect counts.")
+            st.markdown("#### The Math Basis: SARIMA")
+            st.markdown("SARIMA stands for **Seasonal AutoRegressive Integrated Moving Average**. It is a powerful statistical model that breaks a time series down into several components:\n- **AR (AutoRegressive):** A regression of the series against its own past values (lags).\n- **I (Integrated):** The use of differencing to make the series stationary (i.e., remove trends and seasonality).\n- **MA (Moving Average):** A model that uses the dependency between an observation and the residual errors from a moving average model applied to lagged observations.\n- **S (Seasonal):** The extension of the AR, I, and MA components to handle seasonality (patterns that repeat at regular intervals, e.g., yearly, quarterly).")
+            st.markdown("#### The Procedure: Fit, Predict, Visualize")
+            st.markdown("1.  **Data Preparation:** The data must be a time-ordered sequence.\n2.  **Model Identification:** In a full analysis, one would analyze ACF and PACF plots to determine the optimal model orders (p, d, q) and (P, D, Q, s). For this tool, we use a common set of parameters as an example.\n3.  **Fitting:** A SARIMA model is fitted to the historical data.\n4.  **Forecasting:** The fitted model is used to predict future values. It also generates confidence intervals, which represent the uncertainty in the forecast.")
+            st.markdown("#### Significance of the Results: Planning and Proactive Action")
+            st.markdown("The output is a forecast of future values along with an uncertainty band.\n- **The Forecast:** Provides a quantitative estimate for future planning. For example, a forecast of rising complaints can trigger a proactive investigation *before* the problem becomes severe.\n- **The Confidence Interval:** This is equally important. A wide interval indicates high uncertainty in the forecast, while a narrow interval indicates high confidence. This helps in risk assessment and understanding the reliability of the prediction.")
+
+        @st.cache_data
+        def generate_ts_data():
+            t = np.arange(100)
+            trend = 0.5 * t
+            seasonality = 10 * np.sin(2 * np.pi * t / 12) # 12-month seasonality
+            noise = np.random.normal(0, 5, 100)
+            series = 50 + trend + seasonality + noise
+            dates = pd.date_range(start='2020-01-01', periods=100, freq='MS')
+            return pd.Series(series, index=dates)
+
+        ts_data = generate_ts_data()
+        st.markdown("**1. Historical Data (Example: Monthly Complaints)**")
+        st.line_chart(ts_data)
+        
+        st.markdown("**2. Fit Model and Generate Forecast**")
+        n_forecast = st.slider("Select number of periods to forecast:", min_value=12, max_value=48, value=24)
+        
+        # Fit SARIMA model (example orders)
+        model = ARIMA(ts_data, order=(1,1,1), seasonal_order=(1,1,1,12)).fit()
+        forecast = model.get_forecast(steps=n_forecast)
+        forecast_mean = forecast.predicted_mean
+        forecast_ci = forecast.conf_int()
+
+        fig_ts = go.Figure()
+        fig_ts.add_trace(go.Scatter(x=ts_data.index, y=ts_data, mode='lines', name='Historical Data'))
+        fig_ts.add_trace(go.Scatter(x=forecast_mean.index, y=forecast_mean, mode='lines', name='Forecast', line=dict(dash='dash', color='red')))
+        fig_ts.add_trace(go.Scatter(x=forecast_ci.index, y=forecast_ci.iloc[:, 0], mode='lines', name='Lower CI', line=dict(width=0), showlegend=False))
+        fig_ts.add_trace(go.Scatter(x=forecast_ci.index, y=forecast_ci.iloc[:, 1], mode='lines', name='95% Confidence Interval', line=dict(width=0), fill='tonexty', fillcolor='rgba(255, 0, 0, 0.1)'))
+        fig_ts.update_layout(title="Time Series Forecast with SARIMA", yaxis_title="Number of Complaints")
+        st.plotly_chart(fig_ts, use_container_width=True)
 
 
 def render_compliance_guide_tab():
