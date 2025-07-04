@@ -738,22 +738,25 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
             st.markdown("**Overall Feature Importance**")
             st.caption("Which factors have the largest average impact?")
             explainer = shap.TreeExplainer(model)
-            shap_values = explainer.shap_values(X_test)
             
-            mean_abs_shap = np.abs(shap_values[1]).mean(axis=0)
-            feature_names = X_test.columns
-            importance_df = pd.DataFrame({'feature': feature_names, 'importance': mean_abs_shap}).sort_values('importance', ascending=True)
+            # --- DEFINITIVE FIX ---
+            # 1. Use the modern explainer API to get a structured Explanation object
+            shap_explanation = explainer(X_test)
             
-            fig = px.bar(importance_df, x='importance', y='feature', orientation='h',
-                         title="Average Impact on Model Output")
-            fig.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10), yaxis_title=None, xaxis_title="Mean Absolute SHAP Value")
-            st.plotly_chart(fig, use_container_width=True)
+            # 2. Select the SHAP values for the "Fail" class (class 1)
+            shap_values_fail = shap_explanation[:, :, 1]
+            
+            # 3. Create the bar plot using the robust Explanation object
+            fig, ax = plt.subplots(figsize=(6, 4))
+            shap.summary_plot(shap_values_fail, X_test, plot_type="bar", show=False)
+            st.pyplot(fig, use_container_width=True)
 
         st.subheader("Deep Dive: How Feature Values Drive Failure")
         st.markdown("The plot below shows each individual prediction from the test set. Red dots are high feature values, blue are low. For `temperature`, you can see high (red) values push the prediction towards failure (positive SHAP value), while low (blue) values push it towards passing.")
         
         fig_shap_summary, ax_shap_summary = plt.subplots()
-        shap.summary_plot(shap_values[1], X_test, show=False, plot_size=(10, 4))
+        # Use the same robust Explanation object for the beeswarm plot
+        shap.summary_plot(shap_values_fail, X_test, show=False, plot_size=(10, 4))
         ax_shap_summary.set_xlabel("SHAP value (impact on model output towards 'Fail')")
         st.pyplot(fig_shap_summary)
 
