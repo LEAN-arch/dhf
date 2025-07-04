@@ -91,9 +91,6 @@ def render_design_changes(ssm: SessionStateManager) -> None:
                     format="YYYY-MM-DD",
                     help="The date the change was formally approved or rejected."
                 ),
-                # SME Note: A future enhancement could be a nested data editor
-                # for action items required to implement the change, similar
-                # to the design reviews section.
             },
             hide_index=True
         )
@@ -112,67 +109,3 @@ def render_design_changes(ssm: SessionStateManager) -> None:
     except Exception as e:
         st.error("An error occurred while displaying the Design Changes section. The data may be malformed.")
         logger.error(f"Failed to render design changes: {e}", exc_info=True)
-
-
-# ==============================================================================
-# --- UNIT TEST SCAFFOLDING (for `pytest`) ---
-# ==============================================================================
-"""
-import pytest
-from unittest.mock import MagicMock
-
-# To run tests, place this in a 'tests' directory and run pytest.
-# The render function is refactored into a testable "pure" function.
-
-def process_design_changes(ssm: SessionStateManager) -> pd.DataFrame:
-    '''Refactored logic for testing: loads data and converts to DataFrame.'''
-    changes_data = ssm.get_data("design_changes", "changes")
-    return pd.DataFrame(changes_data)
-
-def save_design_changes(df: pd.DataFrame) -> List[Dict[str, Any]]:
-    '''Refactored logic for testing: converts DataFrame back to records.'''
-    # Ensure date columns are handled correctly if they exist
-    if 'approval_date' in df.columns:
-        # Convert NaT to None and datetime to string for JSON-like storage
-        df['approval_date'] = pd.to_datetime(df['approval_date']).dt.strftime('%Y-%m-%d').replace({pd.NaT: None})
-    return df.to_dict('records')
-
-@pytest.fixture
-def mock_ssm_with_changes():
-    '''Mocks SessionStateManager with sample design change data.'''
-    ssm = MagicMock()
-    mock_data = [
-        {"id": "DCR-001", "description": "Initial change", "approval_status": "Approved"},
-        {"id": "DCR-002", "description": "Second change", "approval_status": "Pending"},
-    ]
-    ssm.get_data.return_value = mock_data
-    return ssm
-
-def test_load_design_changes(mock_ssm_with_changes):
-    '''Tests that the data is correctly loaded into a DataFrame.'''
-    df = process_design_changes(mock_ssm_with_changes)
-    assert not df.empty
-    assert len(df) == 2
-    assert "DCR-001" in df['id'].values
-    assert df.columns.tolist() == ["id", "description", "approval_status"]
-
-def test_load_empty_design_changes():
-    '''Tests handling of an empty list of changes.'''
-    ssm = MagicMock()
-    ssm.get_data.return_value = []
-    df = process_design_changes(ssm)
-    assert df.empty
-
-def test_save_design_changes():
-    '''Tests the conversion from an edited DataFrame back to a list of dicts.'''
-    edited_df = pd.DataFrame([
-        {"id": "DCR-001", "description": "Updated change", "approval_status": "Approved"},
-        {"id": "DCR-003", "description": "New change", "approval_status": "Pending"},
-    ])
-
-    saved_data = save_design_changes(edited_df)
-    assert isinstance(saved_data, list)
-    assert len(saved_data) == 2
-    assert saved_data[0]['description'] == "Updated change"
-    assert saved_data[1]['id'] == "DCR-003"
-"""
