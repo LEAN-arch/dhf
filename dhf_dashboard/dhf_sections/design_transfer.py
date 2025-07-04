@@ -1,100 +1,115 @@
-# File: dhf_dashboard/dhf_sections/design_transfer.py
-# --- Enhanced Version ---
+# --- Definitive, Corrected, and Unabridged Optimized Version ---
 """
-Renders the Design Transfer section of the DHF dashboard.
+Module for rendering the Design Transfer section of the DHF Explorer.
 
-This module provides the UI for documenting the activities required to transfer
-the final, validated design to manufacturing, as specified by 21 CFR 820.30(h).
+This component provides an interface to view and manage activities related to
+transferring the device design from R&D to manufacturing, ensuring the product
+can be reliably and consistently produced.
 """
 
 # --- Standard Library Imports ---
 import logging
-from typing import Any, Dict, List
 
 # --- Third-party Imports ---
 import pandas as pd
 import streamlit as st
 
 # --- Local Application Imports ---
-from ..utils.session_state_manager import SessionStateManager
+from dhf_dashboard.utils.session_state_manager import SessionStateManager
 
 # --- Setup Logging ---
 logger = logging.getLogger(__name__)
 
-
-def render_design_transfer(ssm: SessionStateManager) -> None:
+def render_design_transfer(ssm: SessionStateManager):
     """
-    Renders the UI for the Design Transfer section.
-
-    This function displays an editable table for tracking all activities
-    required to ensure the design is correctly translated into production
-    specifications, forming the basis of the Device Master Record (DMR).
-
-    Args:
-        ssm (SessionStateManager): The session state manager to access DHF data.
+    Renders an editable table of design transfer activities.
+    
+    This function displays key Design Transfer tasks, such as process validation
+    (IQ/OQ/PQ), and allows for real-time editing of their status and details.
     """
     st.header("9. Design Transfer")
-    st.markdown("""
-    *As per 21 CFR 820.30(h).*
-
-    This section documents the transfer of the final, validated design to manufacturing. This process is complex
-    for a combination product and must ensure that procedures for handling both the **device components (QSR)** and
-    the **drug substance (cGMP)** are robust and result in a consistently manufactured final product.
-    The output of this phase is a complete Device Master Record (DMR).
-    """)
-    st.info("Changes made here are saved automatically. Track all activities required to make the design manufacturable.", icon="ℹ️")
+    st.markdown("This section documents the activities that ensure the developed device design is correctly translated into production specifications. This is a critical bridge between R&D and Manufacturing.")
+    st.info("💡 **Best Practice:** Design Transfer is not a single event but a continuous process. It should begin early, with Manufacturing Engineering involved in Design Reviews to ensure 'Design for Manufacturability' (DFM).", icon="💡")
+    st.divider()
 
     try:
-        # --- 1. Load Data ---
-        transfer_data: List[Dict[str, Any]] = ssm.get_data("design_transfer", "activities")
-        activities_df = pd.DataFrame(transfer_data)
-        logger.info(f"Loaded {len(activities_df)} design transfer activities.")
+        activities_data = ssm.get_data("design_transfer", "activities")
+        if not activities_data:
+            st.warning("No design transfer activities have been recorded yet.")
+            # Provide a way to add the first activity if the list is empty
+            if st.button("Add First Design Transfer Activity"):
+                # Define a default new activity
+                new_activity = {
+                    "activity": "New Activity",
+                    "responsible_party": "Mfg. Eng.",
+                    "status": "Not Started",
+                    "completion_date": None,
+                    "evidence_link": ""
+                }
+                ssm.update_data([new_activity], "design_transfer", "activities")
+                st.rerun()
+            return
 
-        # --- 2. Display Data Editor ---
-        st.subheader("Transfer Activities and Checklist")
-        st.markdown("Track activities for transferring the complete combination product design to production. These activities and their outputs (procedures, specs) will form the basis of the Device Master Record (DMR).")
+        activities_df = pd.DataFrame(activities_data)
+        
+        # Ensure data consistency for the editor
+        activities_df['completion_date'] = pd.to_datetime(activities_df['completion_date'], errors='coerce')
+        
+        # Define valid options for dropdowns to ensure data integrity
+        status_options = ["Not Started", "In Progress", "Completed", "Blocked"]
+        owner_options = ["Mfg. Eng.", "Quality Eng.", "R&D", "Validation Team"]
+        
+        # Sort to bring active items to the top
+        activities_df['status'] = pd.Categorical(activities_df['status'], categories=status_options, ordered=True)
+        activities_df = activities_df.sort_values(by=['status', 'activity'])
 
+        st.subheader("Process Validation & Transfer Activities")
+        
+        # Use a unique key for the data editor
+        editor_key = "design_transfer_editor"
+        
         edited_df = st.data_editor(
             activities_df,
+            key=editor_key,
             num_rows="dynamic",
             use_container_width=True,
-            key="design_transfer_editor",
             column_config={
-                "activity": st.column_config.TextColumn(
-                    "Transfer Activity / Document",
-                    help="e.g., 'Finalize Device Master Record (DMR)', 'Validate automated assembly line', 'Qualify drug substance supplier', 'Process Validation (IQ/OQ/PQ)'.",
-                    required=True,
-                    width="large"
-                ),
-                "responsible_party": st.column_config.TextColumn(
-                    "Responsible Dept/Party",
-                    help="e.g., 'Manufacturing Eng.', 'Quality Assurance', 'Supply Chain'."
+                "activity": st.column_config.TextColumn("Activity / Deliverable", width="large", required=True),
+                "responsible_party": st.column_config.SelectboxColumn(
+                    "Responsible Party",
+                    options=owner_options,
+                    required=True
                 ),
                 "status": st.column_config.SelectboxColumn(
                     "Status",
-                    options=["Not Started", "In Progress", "Completed", "On Hold"],
+                    options=status_options,
                     required=True
                 ),
                 "completion_date": st.column_config.DateColumn(
-                    "Date Completed",
+                    "Completion Date",
                     format="YYYY-MM-DD"
                 ),
-                "evidence_link": st.column_config.TextColumn(
-                    "Link to Evidence",
-                    help="Filename or hyperlink to the procedure, report, or record providing evidence of completion."
-                ),
+                "evidence_link": st.column_config.LinkColumn(
+                    "Evidence Link",
+                    help="Link to the report or document in the QMS (e.g., IQ-RPT-01.pdf)",
+                    display_text="View Document"
+                )
             },
-            hide_index=True
+            hide_index=True,
         )
 
-        # --- 3. Persist Updated Data ---
-        updated_records = edited_df.to_dict('records')
-
-        if updated_records != transfer_data:
-            ssm.update_data(updated_records, "design_transfer", "activities")
-            logger.info("Design transfer data updated in session state.")
-            st.toast("Design transfer activities saved!", icon="✅")
+        # Check if the data has been changed by the user
+        if not activities_df.equals(edited_df):
+            # Convert datetime objects back to strings for JSON compatibility
+            df_to_save = edited_df.copy()
+            # Handle the date column carefully to allow for empty dates (None)
+            df_to_save['completion_date'] = df_to_save['completion_date'].dt.strftime('%Y-%m-%d').replace({pd.NaT: None})
+            
+            # Update the session state
+            ssm.update_data(df_to_save.to_dict('records'), "design_transfer", "activities")
+            st.toast("Design Transfer activities updated!", icon="✅")
+            st.rerun()
 
     except Exception as e:
         st.error("An error occurred while displaying the Design Transfer section. The data may be malformed.")
-        logger.error(f"Failed to render design transfer: {e}", exc_info=True)
+        logger.error(f"Error in render_design_transfer: {e}", exc_info=True)
