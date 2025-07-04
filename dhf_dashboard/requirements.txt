@@ -1,17 +1,31 @@
-# DHF Command Center - Application Dependencies
+# This file lists the Python dependencies for the DHF Command Center application.
+#
+# To install these dependencies, run the following command in your terminal:
+# pip install -r requirements.txt
+#
+# It is highly recommended to use a virtual environment to keep project
+# dependencies isolated.
+#
+# To create and activate a virtual environment:
+# python -m venv venv
+# On Windows: venv\Scripts\activate
+# On macOS/Linux: source venv/bin/activate
 
-# Core application framework for building the interactive web app
-streamlit==1.33.0
+# The core web application framework for building the interactive dashboard.
+streamlit==1.34.0
 
-# Data manipulation and analysis, used extensively for dataframes
-pandas==2.2.1
+# The primary library for data manipulation and analysis. Used extensively for
+# handling DHF data, creating tables, and preparing data for plots.
+pandas==2.2.2
 
-# Interactive plotting and visualizations (Gantt, Sankey, SPC, etc.)
-plotly==5.19.0
-
-# Fundamental package for numerical computation in Python
-# A core dependency for pandas and scipy
+# A fundamental package for scientific computing with Python. It's a core
+# dependency for Pandas and is used for numerical operations.
 numpy==1.26.4
 
-# Scientific computing library, used here for statistical hypothesis testing (t-test)
-scipy==1.12.0
+# The main library for creating interactive, publication-quality graphs and
+# visualizations, such as the Gantt chart, Sankey diagrams, and bar charts.
+plotly==5.20.0
+
+# A library for scientific and technical computing. Specifically used here for
+# statistical functions, such as the t-test in the "AI & Statistical Tools" tab.
+scipy==1.13.0
