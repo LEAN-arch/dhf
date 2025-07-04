@@ -524,7 +524,7 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
             lifespan = (completed_items['due_date'] - completed_items['created_date']).dt.days.fillna(1).astype(int)
             lifespan = lifespan.apply(lambda d: max(1, d))
             
-            ### BUG FIX: Corrected the seeding function ###
+            # BUG FIX: Corrected the seeding function for ValueError
             def get_deterministic_completion(row):
                 # 1. Generate the full 128-bit integer from the hash
                 full_hash_int = int(hashlib.md5(str(row['id']).encode()).hexdigest(), 16)
@@ -1090,23 +1090,21 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
             # Select the SHAP values for the "Fail" class (class 1)
             shap_values_fail = shap_explanation[:, :, 1]
             
-            fig_bar, ax_bar = plt.subplots(figsize=(6, 4))
-            ### BUG FIX: Corrected SHAP API usage. ###
-            shap.summary_plot(shap_values_fail, plot_type="bar", show=False, axis=ax_bar)
-            plt.tight_layout()
-            st.pyplot(fig_bar, clear_figure=True)
+            # --- BUG FIX: Let SHAP create the plot, then pass it to Streamlit ---
+            # This pattern is more robust across different SHAP versions.
+            shap.summary_plot(shap_values_fail, plot_type="bar", show=False)
+            st.pyplot(plt.gcf(), clear_figure=True)
 
         st.subheader("Deep Dive: How Feature Values Drive Failure")
         st.markdown("The plot below shows each individual prediction from the test set. Red dots are high feature values, blue are low. For `temperature`, you can see high (red) values push the prediction towards failure (positive SHAP value), while low (blue) values push it towards passing.")
         
-        # Use the same robust Explanation object for the beeswarm plot
+        # --- BUG FIX: Let SHAP create the plot, then pass it to Streamlit ---
         shap_values_fail = shap_explanation[:, :, 1]
-        fig_shap_summary, ax_shap_summary = plt.subplots()
-        ### BUG FIX: Corrected SHAP API usage. ###
-        shap.summary_plot(shap_values_fail, show=False, plot_size=None, axis=ax_shap_summary)
-        ax_shap_summary.set_xlabel("SHAP value (impact on model output towards 'Fail')")
-        plt.tight_layout()
-        st.pyplot(fig_shap_summary, clear_figure=True)
+        shap.summary_plot(shap_values_fail, show=False)
+        ax = plt.gca() # Get current axis to modify label
+        ax.set_xlabel("SHAP value (impact on model output towards 'Fail')")
+        st.pyplot(plt.gcf(), clear_figure=True)
+
 
     with ml_tabs[1]:
         st.subheader("Predictive Project Risk: Interactive Analysis")
