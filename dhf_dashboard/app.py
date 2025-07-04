@@ -113,7 +113,6 @@ def get_cached_df(data: List[Dict[str, Any]]) -> pd.DataFrame:
 
 # ==============================================================================
 # --- DASHBOARD DEEP-DIVE COMPONENT FUNCTIONS ---
-# NOTE: THESE ARE THE FULL DEFINITIONS THAT WERE PREVIOUSLY MISSING
 # ==============================================================================
 
 def render_dhf_completeness_panel(ssm: SessionStateManager, tasks_df: pd.DataFrame) -> None:
@@ -131,31 +130,35 @@ def render_dhf_completeness_panel(ssm: SessionStateManager, tasks_df: pd.DataFra
         if not tasks_raw:
             st.warning("No project management tasks found.")
             return
-
+        
+        # FIX: The loop of expanders was removed. Now we just iterate and display content.
+        # This prevents nesting expanders, which is not allowed by Streamlit.
         for task in tasks_raw:
             task_name = task.get('name', 'N/A')
-            expander_title = f"**{task_name}** (Status: {task.get('status', 'N/A')} - {task.get('completion_pct', 0)}%)"
-            with st.expander(expander_title):
-                col1, col2 = st.columns([2, 1])
-                with col1:
-                    st.markdown("**Associated DHF Documents:**")
-                    phase_docs = docs_df[docs_df['phase'] == task_name] if 'phase' in docs_df.columns else pd.DataFrame()
-                    if not phase_docs.empty:
-                        st.dataframe(phase_docs[['id', 'title', 'status']], use_container_width=True, hide_index=True)
-                    else:
-                        st.caption("No documents for this phase yet.")
-                with col2:
-                    st.markdown("**Cross-Functional Sign-offs:**")
-                    sign_offs = task.get('sign_offs', {})
-                    if isinstance(sign_offs, dict):
-                        for team, status in sign_offs.items():
-                            color = "green" if status == "✅" else "orange" if status == "In Progress" else "grey"
-                            st.markdown(f"- **{team}:** <span style='color:{color};'>{status}</span>", unsafe_allow_html=True)
-                    else:
-                        st.caption("Sign-off data is not in the correct format.")
+            st.subheader(f"Phase: {task_name}")
+            st.caption(f"Status: {task.get('status', 'N/A')} - {task.get('completion_pct', 0)}% Complete")
+            
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                st.markdown("**Associated DHF Documents:**")
+                phase_docs = docs_df[docs_df['phase'] == task_name] if 'phase' in docs_df.columns else pd.DataFrame()
+                if not phase_docs.empty:
+                    st.dataframe(phase_docs[['id', 'title', 'status']], use_container_width=True, hide_index=True)
+                else:
+                    st.caption("No documents for this phase yet.")
+            with col2:
+                st.markdown("**Cross-Functional Sign-offs:**")
+                sign_offs = task.get('sign_offs', {})
+                if isinstance(sign_offs, dict) and sign_offs:
+                    for team, status in sign_offs.items():
+                        color = "green" if status == "✅" else "orange" if status == "In Progress" else "grey"
+                        st.markdown(f"- **{team}:** <span style='color:{color};'>{status}</span>", unsafe_allow_html=True)
+                else:
+                    st.caption("No sign-off data for this phase.")
+            st.divider()
         
         st.markdown("---")
-        st.markdown("##### Project Phase Timeline (Gantt Chart)")
+        st.subheader("Project Phase Timeline (Gantt Chart)")
         if not tasks_df.empty:
             gantt_fig = px.timeline(
                 tasks_df, x_start="start_date", x_end="end_date", y="name",
@@ -236,9 +239,6 @@ def render_risk_and_fmea_dashboard(ssm: SessionStateManager) -> None:
     def render_fmea_risk_matrix_plot(fmea_data: List[Dict[str, Any]], title: str) -> None:
         """
         Renders an advanced, interactive Risk Matrix Bubble Chart for FMEA data.
-        This visualization provides a multi-dimensional view of risk, plotting
-        Severity vs. Occurrence, with bubble size representing RPN and color
-        representing Detectability.
         """
         st.info(f"""
         **How to read this chart:** This is not a simple chart. It's a professional risk analysis tool.
@@ -258,69 +258,39 @@ def render_risk_and_fmea_dashboard(ssm: SessionStateManager) -> None:
             df = pd.DataFrame(fmea_data)
             df['RPN'] = df['S'] * df['O'] * df['D']
             
-            # Add jitter to avoid perfect overlap of points with same S and O
             df['S_jitter'] = df['S'] + np.random.uniform(-0.1, 0.1, len(df))
             df['O_jitter'] = df['O'] + np.random.uniform(-0.1, 0.1, len(df))
 
             fig = go.Figure()
 
-            # --- Add Risk Matrix Background ---
-            fig.add_shape(type="rect", x0=0.5, y0=0.5, x1=5.5, y1=5.5, line=dict(width=0), fillcolor='rgba(44, 160, 44, 0.1)', layer='below') # Low/Green base
-            fig.add_shape(type="rect", x0=2.5, y0=2.5, x1=5.5, y1=5.5, line=dict(width=0), fillcolor='rgba(255, 215, 0, 0.15)', layer='below') # Medium/Yellow
-            fig.add_shape(type="rect", x0=3.5, y0=3.5, x1=5.5, y1=5.5, line=dict(width=0), fillcolor='rgba(255, 127, 14, 0.15)', layer='below') # High/Orange
-            fig.add_shape(type="rect", x0=4.5, y0=4.5, x1=5.5, y1=5.5, line=dict(width=0), fillcolor='rgba(214, 39, 40, 0.15)', layer='below') # Unacceptable/Red
+            fig.add_shape(type="rect", x0=0.5, y0=0.5, x1=5.5, y1=5.5, line=dict(width=0), fillcolor='rgba(44, 160, 44, 0.1)', layer='below') 
+            fig.add_shape(type="rect", x0=2.5, y0=2.5, x1=5.5, y1=5.5, line=dict(width=0), fillcolor='rgba(255, 215, 0, 0.15)', layer='below') 
+            fig.add_shape(type="rect", x0=3.5, y0=3.5, x1=5.5, y1=5.5, line=dict(width=0), fillcolor='rgba(255, 127, 14, 0.15)', layer='below')
+            fig.add_shape(type="rect", x0=4.5, y0=4.5, x1=5.5, y1=5.5, line=dict(width=0), fillcolor='rgba(214, 39, 40, 0.15)', layer='below')
 
-            # --- Add Bubbles for each FMEA item ---
             fig.add_trace(go.Scatter(
-                x=df['S_jitter'],
-                y=df['O_jitter'],
-                mode='markers+text',
-                text=df['id'],
-                textposition='top center',
-                textfont=dict(size=9, color='#444'),
+                x=df['S_jitter'], y=df['O_jitter'],
+                mode='markers+text', text=df['id'], textposition='top center', textfont=dict(size=9, color='#444'),
                 marker=dict(
-                    size=df['RPN'],
-                    sizemode='area',
-                    sizeref=2. * max(df['RPN']) / (40.**2), # Scale bubble size appropriately
-                    sizemin=4,
-                    color=df['D'],
-                    colorscale='YlOrRd', # Yellow -> Orange -> Red (Low D to High D)
-                    colorbar=dict(title='Detection'),
-                    showscale=True,
-                    line_width=1,
-                    line_color='black'
+                    size=df['RPN'], sizemode='area', sizeref=2. * max(df['RPN']) / (40.**2), sizemin=4,
+                    color=df['D'], colorscale='YlOrRd', colorbar=dict(title='Detection'),
+                    showscale=True, line_width=1, line_color='black'
                 ),
                 customdata=df[['failure_mode', 'potential_effect', 'S', 'O', 'D', 'RPN', 'mitigation']],
-                hovertemplate="""
-                <b>%{customdata[0]}</b><br>
-                --------------------------------<br>
-                <b>Effect:</b> %{customdata[1]}<br>
-                <b>S:</b> %{customdata[2]} | <b>O:</b> %{customdata[3]} | <b>D:</b> %{customdata[4]}<br>
-                <b>RPN: %{customdata[5]}</b><br>
-                <b>Mitigation:</b> %{customdata[6]}
-                <extra></extra>
-                """
+                hovertemplate="""<b>%{customdata[0]}</b><br>--------------------------------<br><b>Effect:</b> %{customdata[1]}<br><b>S:</b> %{customdata[2]} | <b>O:</b> %{customdata[3]} | <b>D:</b> %{customdata[4]}<br><b>RPN: %{customdata[5]}</b><br><b>Mitigation:</b> %{customdata[6]}<extra></extra>"""
             ))
             
             fig.update_layout(
-                title=f"<b>{title} Risk Landscape</b>",
-                xaxis_title="Severity (S)",
-                yaxis_title="Occurrence (O)",
-                xaxis=dict(range=[0.5, 5.5], tickvals=list(range(1, 6))),
-                yaxis=dict(range=[0.5, 5.5], tickvals=list(range(1, 6))),
-                height=600,
-                title_x=0.5,
-                showlegend=False
+                title=f"<b>{title} Risk Landscape</b>", xaxis_title="Severity (S)", yaxis_title="Occurrence (O)",
+                xaxis=dict(range=[0.5, 5.5], tickvals=list(range(1, 6))), yaxis=dict(range=[0.5, 5.5], tickvals=list(range(1, 6))),
+                height=600, title_x=0.5, showlegend=False
             )
             st.plotly_chart(fig, use_container_width=True)
-
         except (KeyError, TypeError) as e:
             st.error(f"Could not render {title} Risk Matrix. Data may be malformed or missing S, O, D columns.")
             logger.error(f"Error in render_fmea_risk_matrix_plot for {title}: {e}", exc_info=True)
-
     with risk_tabs[1]:
         render_fmea_risk_matrix_plot(ssm.get_data("risk_management_file", "dfmea"), "dFMEA")
-    
     with risk_tabs[2]:
         render_fmea_risk_matrix_plot(ssm.get_data("risk_management_file", "pfmea"), "pFMEA")
 
@@ -329,20 +299,21 @@ def render_qbd_and_cgmp_panel(ssm: SessionStateManager) -> None:
     st.subheader("3. DHF to Manufacturing Readiness")
     st.markdown("This section tracks key activities that bridge the design with a robust, manufacturable product, including Quality by Design (QbD) and CGMP compliance.")
     qbd_tabs = st.tabs(["Quality by Design (QbD) Linkages", "CGMP Readiness"])
-
     with qbd_tabs[0]:
         try:
             qbd_elements = ssm.get_data("quality_by_design", "elements")
             if not qbd_elements: st.warning("No Quality by Design elements have been defined.")
             else:
+                # FIX: Replaced st.expander with st.subheader/markdown to avoid nesting.
                 for element in qbd_elements:
-                    with st.expander(f"**CQA:** {element.get('cqa', 'N/A')} (links to Requirement: {element.get('links_to_req', 'N/A')})"):
-                        st.markdown(f"**Critical Material Attributes (CMAs):** `{' | '.join(element.get('cm_attributes', []))}`")
-                        st.markdown(f"**Critical Process Parameters (CPPs):** `{' | '.join(element.get('cp_parameters', []))}`")
+                    st.subheader(f"CQA: {element.get('cqa', 'N/A')}")
+                    st.caption(f"(Links to Requirement: {element.get('links_to_req', 'N/A')})")
+                    st.markdown(f"**Critical Material Attributes (CMAs):** `{' | '.join(element.get('cm_attributes', []))}`")
+                    st.markdown(f"**Critical Process Parameters (CPPs):** `{' | '.join(element.get('cp_parameters', []))}`")
+                    st.divider()
             st.info("💡 FTR (First-Time-Right) initiatives are driven by deeply understanding and controlling the CMAs and CPPs that affect the product's CQAs.", icon="💡")
         except Exception as e:
             st.error("Could not render QbD linkages."); logger.error(f"Error in render_qbd_and_cgmp_panel (QbD): {e}", exc_info=True)
-
     with qbd_tabs[1]:
         try:
             cgmp_data = ssm.get_data("quality_system", "cgmp_compliance")
@@ -355,7 +326,8 @@ def render_qbd_and_cgmp_panel(ssm: SessionStateManager) -> None:
                     total, passed = brr.get('total', 0), brr.get('passed', 0)
                     pass_rate = (passed / total) * 100 if total > 0 else 0
                     st.metric(f"Batch Pass Rate", f"{pass_rate:.1f}%", f"{passed}/{total} Passed")
-                    st.progress(pass_rate)
+                    # FIX: st.progress requires a value between 0.0 and 1.0.
+                    st.progress(pass_rate / 100)
                 with col2:
                     st.markdown("**Drug-Device Stability Studies**")
                     stability_df = get_cached_df(cgmp_data.get('stability_studies', []))
@@ -365,40 +337,34 @@ def render_qbd_and_cgmp_panel(ssm: SessionStateManager) -> None:
         except Exception as e:
             st.error("Could not render CGMP readiness."); logger.error(f"Error in render_qbd_and_cgmp_panel (CGMP): {e}", exc_info=True)
 
-
 def render_audit_and_improvement_dashboard(ssm: SessionStateManager) -> None:
     """Renders the audit readiness and continuous improvement dashboard."""
     st.subheader("4. Audit & Continuous Improvement Readiness")
     st.markdown("A high-level assessment of QMS health and process efficiency to gauge readiness for audits and track improvement initiatives.")
     audit_tabs = st.tabs(["Audit Readiness Scorecard", "FTR & COPQ Dashboard"])
-
     with audit_tabs[0]:
         try:
             docs_df = get_cached_df(ssm.get_data("design_outputs", "documents"))
             doc_readiness = (len(docs_df[docs_df['status'] == 'Approved']) / len(docs_df)) * 100 if not docs_df.empty else 0
-
             capas_df = get_cached_df(ssm.get_data("quality_system", "capa_records"))
             open_capas = len(capas_df[capas_df['status'] == 'Open']) if not capas_df.empty else 0
-            # Lower is better for CAPAs, so score is inverted
             capa_score = max(0, 100 - (open_capas * 20))
-
             suppliers_df = get_cached_df(ssm.get_data("quality_system", "supplier_audits"))
             supplier_pass_rate = (len(suppliers_df[suppliers_df['status'] == 'Pass']) / len(suppliers_df)) * 100 if not suppliers_df.empty else 100
-
             col1, col2, col3 = st.columns(3)
             with col1:
                 st.metric("DHF Document Readiness", f"{doc_readiness:.1f}% Approved")
-                st.progress(int(doc_readiness))
+                # FIX: st.progress requires a value between 0.0 and 1.0.
+                st.progress(doc_readiness / 100)
             with col2:
                 st.metric("Open CAPA Score", f"{int(capa_score)}/100", help=f"{open_capas} open CAPA(s). Score degrades with each open item.")
-                st.progress(int(capa_score))
+                st.progress(capa_score / 100)
             with col3:
                 st.metric("Supplier Audit Pass Rate", f"{supplier_pass_rate:.1f}%")
-                st.progress(int(supplier_pass_rate))
+                st.progress(supplier_pass_rate / 100)
             st.success("Bonus: Next mock internal audit scheduled for Q4 2025.")
         except Exception as e:
             st.error("Could not render Audit Readiness Scorecard."); logger.error(f"Error in render_audit_and_improvement_dashboard (Scorecard): {e}", exc_info=True)
-
     with audit_tabs[1]:
         try:
             improvements_df = get_cached_df(ssm.get_data("quality_system", "continuous_improvement"))
@@ -417,8 +383,7 @@ def render_audit_and_improvement_dashboard(ssm: SessionStateManager) -> None:
             with col2:
                 st.markdown("**Calculated Process Capability**")
                 if spc_data and spc_data.get('measurements'):
-                    meas = np.array(spc_data['measurements'])
-                    usl, lsl = spc_data['usl'], spc_data['lsl']
+                    meas = np.array(spc_data['measurements']); usl, lsl = spc_data['usl'], spc_data['lsl']
                     mu, sigma = meas.mean(), meas.std()
                     cpk = min((usl - mu) / (3 * sigma), (mu - lsl) / (3 * sigma)) if sigma > 0 else 0
                     st.metric("Process Capability (Cpk)", f"{cpk:.2f}", delta=f"{cpk-1.33:.2f} vs. target 1.33", delta_color="normal", help="A Cpk > 1.33 indicates a capable process. This is calculated live from SPC data.")
@@ -426,7 +391,6 @@ def render_audit_and_improvement_dashboard(ssm: SessionStateManager) -> None:
                 st.caption("Increased Cpk from process optimization (DOE) directly reduces COPQ.")
         except Exception as e:
             st.error("Could not render FTR & COPQ Dashboard."); logger.error(f"Error in render_audit_and_improvement_dashboard (FTR/COPQ): {e}", exc_info=True)
-
 
 # ==============================================================================
 # --- TAB RENDERING FUNCTIONS ---
@@ -437,137 +401,79 @@ def render_health_dashboard_tab(ssm: SessionStateManager, tasks_df: pd.DataFrame
     Renders the main DHF Health Dashboard tab, enhanced for executive-level
     at-a-glance assessment and deep-dive analysis.
     """
+    st.header("Executive Health Summary")
     
-    # ==========================================================================
-    # --- 1. HEALTH SCORE & KHI CALCULATION ---
-    # This logic synthesizes data from across the DHF into high-level scores.
-    # ==========================================================================
-    
-    # --- Schedule Performance Score ---
+    # --- Health Score & KHI Calculation ---
     schedule_score = 0
     if not tasks_df.empty:
-        today = pd.to_datetime('today')
-        overdue_in_progress = tasks_df[(tasks_df['status'] == 'In Progress') & (tasks_df['end_date'] < today)]
+        today = pd.to_datetime('today'); overdue_in_progress = tasks_df[(tasks_df['status'] == 'In Progress') & (tasks_df['end_date'] < today)]
         total_in_progress = tasks_df[tasks_df['status'] == 'In Progress']
-        adherence = (1 - (len(overdue_in_progress) / len(total_in_progress))) * 100 if not total_in_progress.empty else 100
-        schedule_score = adherence
-
-    # --- Quality & Risk Score ---
-    risk_score = 0
-    hazards_df = get_cached_df(ssm.get_data("risk_management_file", "hazards"))
+        schedule_score = (1 - (len(overdue_in_progress) / len(total_in_progress))) * 100 if not total_in_progress.empty else 100
+    hazards_df = get_cached_df(ssm.get_data("risk_management_file", "hazards")); risk_score = 0
     if not hazards_df.empty and all(c in hazards_df.columns for c in ['initial_S', 'initial_O', 'initial_D', 'final_S', 'final_O', 'final_D']):
         hazards_df['initial_rpn'] = hazards_df['initial_S'] * hazards_df['initial_O'] * hazards_df['initial_D']
         hazards_df['final_rpn'] = hazards_df['final_S'] * hazards_df['final_O'] * hazards_df['final_D']
-        initial_rpn_sum = hazards_df['initial_rpn'].sum()
-        final_rpn_sum = hazards_df['final_rpn'].sum()
+        initial_rpn_sum = hazards_df['initial_rpn'].sum(); final_rpn_sum = hazards_df['final_rpn'].sum()
         risk_reduction_pct = ((initial_rpn_sum - final_rpn_sum) / initial_rpn_sum) * 100 if initial_rpn_sum > 0 else 100
         risk_score = max(0, risk_reduction_pct)
-    
-    # --- Execution & Compliance Score ---
-    reviews_data = ssm.get_data("design_reviews", "reviews")
-    action_items = [item for r in reviews_data for item in r.get("action_items", [])]
-    action_items_df = get_cached_df(action_items)
-    execution_score = 100
+    reviews_data = ssm.get_data("design_reviews", "reviews"); action_items = [item for r in reviews_data for item in r.get("action_items", [])]
+    action_items_df = get_cached_df(action_items); execution_score = 100
     if not action_items_df.empty:
         open_items = action_items_df[action_items_df['status'] != 'Completed']
         if not open_items.empty:
             overdue_items_count = len(open_items[open_items['status'] == 'Overdue'])
             execution_score = (1 - (overdue_items_count / len(open_items))) * 100
-
-    # --- Overall Health Score (Weighted Average) ---
     weights = {'schedule': 0.4, 'quality': 0.4, 'execution': 0.2}
     overall_health_score = (schedule_score * weights['schedule']) + (risk_score * weights['quality']) + (execution_score * weights['execution'])
-
-    # --- KHI: V&V Pass Rate ---
-    ver_tests_df = get_cached_df(ssm.get_data("design_verification", "tests"))
-    val_studies_df = get_cached_df(ssm.get_data("design_validation", "studies"))
-    total_vv = len(ver_tests_df) + len(val_studies_df)
-    passed_vv = len(ver_tests_df[ver_tests_df['status'] == 'Completed']) + len(val_studies_df[val_studies_df['result'] == 'Pass'])
+    ver_tests_df = get_cached_df(ssm.get_data("design_verification", "tests")); val_studies_df = get_cached_df(ssm.get_data("design_validation", "studies"))
+    total_vv = len(ver_tests_df) + len(val_studies_df); passed_vv = len(ver_tests_df[ver_tests_df['status'] == 'Completed']) + len(val_studies_df[val_studies_df['result'] == 'Pass'])
     vv_pass_rate = (passed_vv / total_vv) * 100 if total_vv > 0 else 0
-
-    # --- KHI: Traceability Coverage ---
-    reqs_df = get_cached_df(ssm.get_data("design_inputs", "requirements"))
-    ver_tests_with_links = ver_tests_df.dropna(subset=['input_verified_id'])['input_verified_id'].nunique()
-    total_reqs = reqs_df['id'].nunique()
-    trace_coverage = (ver_tests_with_links / total_reqs) * 100 if total_reqs > 0 else 0
-
-    # --- KHI: Critical Open CAPAs ---
-    capas_df = get_cached_df(ssm.get_data("quality_system", "capa_records"))
-    open_capas_df = capas_df[capas_df['status'] == 'Open'] if not capas_df.empty else pd.DataFrame()
+    reqs_df = get_cached_df(ssm.get_data("design_inputs", "requirements")); ver_tests_with_links = ver_tests_df.dropna(subset=['input_verified_id'])['input_verified_id'].nunique()
+    total_reqs = reqs_df['id'].nunique(); trace_coverage = (ver_tests_with_links / total_reqs) * 100 if total_reqs > 0 else 0
+    capas_df = get_cached_df(ssm.get_data("quality_system", "capa_records")); open_capas_df = capas_df[capas_df['status'] == 'Open'] if not capas_df.empty else pd.DataFrame()
     critical_capas_count = len(open_capas_df)
-
-    # --- KHI: Overdue Action Items ---
     overdue_actions_count = len(action_items_df[action_items_df['status'] == 'Overdue']) if not action_items_df.empty else 0
 
-
-    # ==========================================================================
-    # --- 2. RENDER THE DASHBOARD ---
-    # ==========================================================================
-    
-    st.header("Executive Health Summary")
-    
+    # --- Render Dashboard ---
     col1, col2 = st.columns([1.5, 2])
     with col1:
         fig = go.Figure(go.Indicator(
-            mode = "gauge+number", value = overall_health_score,
-            title = {'text': "<b>Overall Project Health Score</b>"},
+            mode = "gauge+number", value = overall_health_score, title = {'text': "<b>Overall Project Health Score</b>"},
             number = {'font': {'size': 48}}, domain = {'x': [0, 1], 'y': [0, 1]},
-            gauge = {
-                'axis': {'range': [None, 100]},
-                'bar': {'color': "green" if overall_health_score > 80 else "orange" if overall_health_score > 60 else "red"},
-                'steps' : [{'range': [0, 60], 'color': "#fdecec"}, {'range': [60, 80], 'color': "#fef3e7"}, {'range': [80, 100], 'color': "#eaf5ea"}],
-            }))
-        fig.update_layout(height=250, margin=dict(l=20, r=20, t=50, b=20))
-        st.plotly_chart(fig, use_container_width=True)
-
+            gauge = {'axis': {'range': [None, 100]}, 'bar': {'color': "green" if overall_health_score > 80 else "orange" if overall_health_score > 60 else "red"},
+                     'steps' : [{'range': [0, 60], 'color': "#fdecec"}, {'range': [60, 80], 'color': "#fef3e7"}, {'range': [80, 100], 'color': "#eaf5ea"}]}))
+        fig.update_layout(height=250, margin=dict(l=20, r=20, t=50, b=20)); st.plotly_chart(fig, use_container_width=True)
     with col2:
-        st.markdown("<br>", unsafe_allow_html=True) 
-        sub_col1, sub_col2, sub_col3 = st.columns(3)
+        st.markdown("<br>", unsafe_allow_html=True); sub_col1, sub_col2, sub_col3 = st.columns(3)
         sub_col1.metric("Schedule Performance", f"{schedule_score:.0f}/100", help=f"Weighted at {weights['schedule']*100}%. Based on adherence of active tasks to their planned end dates.")
         sub_col2.metric("Quality & Risk Posture", f"{risk_score:.0f}/100", help=f"Weighted at {weights['quality']*100}%. Based on the percentage of initial RPN that has been mitigated.")
         sub_col3.metric("Execution & Compliance", f"{execution_score:.0f}/100", help=f"Weighted at {weights['execution']*100}%. Based on the ratio of overdue items to all open action items.")
         st.caption("The Overall Health Score is a weighted average of these three key performance domains.")
-
     st.divider()
-
-    st.subheader("Key Health Indicators (KHIs)")
-    khi_col1, khi_col2, khi_col3, khi_col4 = st.columns(4)
+    st.subheader("Key Health Indicators (KHIs)"); khi_col1, khi_col2, khi_col3, khi_col4 = st.columns(4)
     with khi_col1:
-        st.metric(label="V&V Pass Rate", value=f"{vv_pass_rate:.1f}%", help="Percentage of all Verification and Validation protocols that are complete and passing.")
-        st.progress(int(vv_pass_rate))
+        st.metric(label="V&V Pass Rate", value=f"{vv_pass_rate:.1f}%", help="Percentage of all Verification and Validation protocols that are complete and passing."); st.progress(vv_pass_rate / 100)
     with khi_col2:
-        st.metric(label="Traceability Coverage", value=f"{trace_coverage:.1f}%", help="Percentage of requirements that are linked to at least one verification test.")
-        st.progress(int(trace_coverage))
+        st.metric(label="Traceability Coverage", value=f"{trace_coverage:.1f}%", help="Percentage of requirements that are linked to at least one verification test."); st.progress(trace_coverage / 100)
     with khi_col3:
         st.metric(label="Open CAPAs", value=critical_capas_count, delta=critical_capas_count, delta_color="inverse", help="Count of open CAPAs. Lower is better.")
     with khi_col4:
         st.metric(label="Overdue Action Items", value=overdue_actions_count, delta=overdue_actions_count, delta_color="inverse", help="Total number of action items from all design reviews that are past their due date.")
-    
     st.divider()
-    
     st.subheader("Action Item Burn-down (Last 30 Days)")
     if not action_items_df.empty:
-        df = action_items_df.copy()
-        df['due_date'] = pd.to_datetime(df['due_date'], errors='coerce')
-        df['created_date'] = df['due_date'] - pd.to_timedelta(np.random.randint(10, 30, len(df)), unit='d')
-        today = pd.to_datetime('today')
-        date_range = pd.date_range(end=today, periods=30, freq='D')
+        df = action_items_df.copy(); df['due_date'] = pd.to_datetime(df['due_date'], errors='coerce'); df['created_date'] = df['due_date'] - pd.to_timedelta(np.random.randint(10, 30, len(df)), unit='d')
+        today = pd.to_datetime('today'); date_range = pd.date_range(end=today, periods=30, freq='D')
         opened_series = df.set_index('created_date').resample('D').size().reindex(date_range, fill_value=0)
         completed_items = df[df['status']=='Completed'].copy()
         completed_items['completion_date'] = completed_items['due_date'] - pd.to_timedelta(np.random.randint(0, 5, len(completed_items)), unit='d')
         closed_series = completed_items.set_index('completion_date').resample('D').size().reindex(date_range, fill_value=0)
-        net_change = opened_series - closed_series
-        initial_open = len(df[df['created_date'] < date_range.min()]) - len(completed_items[completed_items['completion_date'] < date_range.min()])
+        net_change = opened_series - closed_series; initial_open = len(df[df['created_date'] < date_range.min()]) - len(completed_items[completed_items['completion_date'] < date_range.min()])
         burndown = net_change.cumsum() + initial_open
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(x=burndown.index, y=burndown.values, mode='lines+markers', name='Open Items', fill='tozeroy'))
-        fig.update_layout(title="Trend of Total Open Action Items", yaxis_title="Number of Open Items", height=300)
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.caption("No action item data to generate a burn-down chart.")
-
+        fig = go.Figure(); fig.add_trace(go.Scatter(x=burndown.index, y=burndown.values, mode='lines+markers', name='Open Items', fill='tozeroy'))
+        fig.update_layout(title="Trend of Total Open Action Items", yaxis_title="Number of Open Items", height=300); st.plotly_chart(fig, use_container_width=True)
+    else: st.caption("No action item data to generate a burn-down chart.")
     st.divider()
-    
     st.header("Deep Dives")
     with st.expander("Expand to see Phase Gate Readiness & Timeline Details"):
         render_dhf_completeness_panel(ssm, tasks_df)
@@ -600,22 +506,18 @@ def render_advanced_analytics_tab(ssm: SessionStateManager):
         st.warning("Directly edit project timelines, statuses, and dependencies. Changes are saved automatically.", icon="⚠️")
         try:
             tasks_df_to_edit = pd.DataFrame(ssm.get_data("project_management", "tasks"))
-            tasks_df_to_edit['start_date'] = pd.to_datetime(tasks_df_to_edit['start_date'], errors='coerce')
-            tasks_df_to_edit['end_date'] = pd.to_datetime(tasks_df_to_edit['end_date'], errors='coerce')
+            tasks_df_to_edit['start_date'] = pd.to_datetime(tasks_df_to_edit['start_date'], errors='coerce'); tasks_df_to_edit['end_date'] = pd.to_datetime(tasks_df_to_edit['end_date'], errors='coerce')
+            original_df = tasks_df_to_edit.copy() # Capture original state for comparison
             edited_df = st.data_editor(
                 tasks_df_to_edit, key="main_task_editor", num_rows="dynamic", use_container_width=True,
-                column_config={"start_date": st.column_config.DateColumn("Start Date", format="YYYY-MM-DD", required=True),
-                               "end_date": st.column_config.DateColumn("End Date", format="YYYY-MM-DD", required=True)}
-            )
-            if not tasks_df_to_edit.equals(edited_df):
+                column_config={"start_date": st.column_config.DateColumn("Start Date", format="YYYY-MM-DD", required=True), "end_date": st.column_config.DateColumn("End Date", format="YYYY-MM-DD", required=True)})
+            if not original_df.equals(edited_df):
                 df_to_save = edited_df.copy()
                 df_to_save['start_date'] = df_to_save['start_date'].dt.strftime('%Y-%m-%d').replace({pd.NaT: None})
                 df_to_save['end_date'] = df_to_save['end_date'].dt.strftime('%Y-%m-%d').replace({pd.NaT: None})
                 ssm.update_data(df_to_save.to_dict('records'), "project_management", "tasks")
-                st.toast("Project tasks updated! Rerunning...", icon="✅")
-                st.rerun()
-        except Exception as e:
-            st.error("Could not load the Project Task Editor."); logger.error(f"Error in task editor: {e}", exc_info=True)
+                st.toast("Project tasks updated! Rerunning...", icon="✅"); st.rerun()
+        except Exception as e: st.error("Could not load the Project Task Editor."); logger.error(f"Error in task editor: {e}", exc_info=True)
 
 def render_statistical_tools_tab(ssm: SessionStateManager):
     """Renders the Statistical Workbench tab with professionally enhanced tools."""
@@ -626,8 +528,7 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
         from statsmodels.formula.api import ols
         from scipy.stats import shapiro, mannwhitneyu
     except ImportError:
-        st.error("This tab requires `statsmodels` and `scipy`. Please install them (`pip install statsmodels scipy`) to enable statistical tools.", icon="🚨")
-        return
+        st.error("This tab requires `statsmodels` and `scipy`. Please install them (`pip install statsmodels scipy`) to enable statistical tools.", icon="🚨"); return
     tool_tabs = st.tabs(["Process Control (SPC)", "Hypothesis Testing (A/B Test)", "Pareto Analysis (FMEA)", "Design of Experiments (DOE)"])
     with tool_tabs[0]:
         st.subheader("Statistical Process Control (SPC) with Rule Checking")
@@ -660,8 +561,7 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
                 fig.add_hline(y=spc_data['lsl'], line_dash="dot", line_color="red", annotation_text="LSL")
                 fig.add_hline(y=ucl, line_dash="dashdot", line_color="orange", annotation_text="UCL (Process Voice)")
                 fig.add_hline(y=lcl, line_dash="dashdot", line_color="orange", annotation_text="LCL (Process Voice)")
-                fig.update_layout(title="SPC Chart for Pill Casing Diameter", yaxis_title="Diameter (mm)")
-                st.plotly_chart(fig, use_container_width=True)
+                fig.update_layout(title="SPC Chart for Pill Casing Diameter", yaxis_title="Diameter (mm)"); st.plotly_chart(fig, use_container_width=True)
             else: st.warning("SPC data is incomplete or missing.")
         except Exception as e: st.error("Could not render SPC chart."); logger.error(f"Error in SPC tool: {e}", exc_info=True)
     with tool_tabs[1]:
@@ -676,27 +576,22 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
             ht_data = ssm.get_data("quality_system", "hypothesis_testing_data")
             if ht_data and all(k in ht_data for k in ['line_a', 'line_b']):
                 line_a, line_b = ht_data['line_a'], ht_data['line_b']
-                shapiro_a = shapiro(line_a); shapiro_b = shapiro(line_b)
-                is_normal = shapiro_a.pvalue > 0.05 and shapiro_b.pvalue > 0.05
+                shapiro_a = shapiro(line_a); shapiro_b = shapiro(line_b); is_normal = shapiro_a.pvalue > 0.05 and shapiro_b.pvalue > 0.05
                 col1, col2 = st.columns(2)
                 with col1:
-                    st.markdown("**1. Assumption Check (Normality)**")
-                    st.caption(f"Shapiro-Wilk p-value for Line A: {shapiro_a.pvalue:.3f}"); st.caption(f"Shapiro-Wilk p-value for Line B: {shapiro_b.pvalue:.3f}")
+                    st.markdown("**1. Assumption Check (Normality)**"); st.caption(f"Shapiro-Wilk p-value for Line A: {shapiro_a.pvalue:.3f}"); st.caption(f"Shapiro-Wilk p-value for Line B: {shapiro_b.pvalue:.3f}")
                     st.markdown("**2. Statistical Test Execution**")
                     if is_normal:
-                        st.info("Data appears normally distributed. Performing Welch's t-test.", icon="✅")
-                        stat, p_value = stats.ttest_ind(line_a, line_b, equal_var=False); test_name = "Welch's t-test"
+                        st.info("Data appears normally distributed. Performing Welch's t-test.", icon="✅"); stat, p_value = stats.ttest_ind(line_a, line_b, equal_var=False); test_name = "Welch's t-test"
                     else:
-                        st.warning("Data may not be normal. Switching to non-parametric Mann-Whitney U test.", icon="⚠️")
-                        stat, p_value = mannwhitneyu(line_a, line_b); test_name = "Mann-Whitney U test"
+                        st.warning("Data may not be normal. Switching to non-parametric Mann-Whitney U test.", icon="⚠️"); stat, p_value = mannwhitneyu(line_a, line_b); test_name = "Mann-Whitney U test"
                     st.metric(f"{test_name} Statistic", f"{stat:.3f}"); st.metric("P-value", f"{p_value:.3f}")
                     st.markdown("**3. Conclusion**")
                     if p_value < 0.05: st.success(f"**Conclusion:** A statistically significant difference exists between the two lines (p < 0.05).")
                     else: st.warning(f"**Conclusion:** We cannot conclude a statistically significant difference exists (p >= 0.05).")
                 with col2:
                     df_ht = pd.concat([pd.DataFrame({'value': line_a, 'line': 'Line A'}), pd.DataFrame({'value': line_b, 'line': 'Line B'})])
-                    fig = px.box(df_ht, x='line', y='value', title="Distribution Comparison", points="all", labels={'value': 'Seal Strength'})
-                    st.plotly_chart(fig, use_container_width=True)
+                    fig = px.box(df_ht, x='line', y='value', title="Distribution Comparison", points="all", labels={'value': 'Seal Strength'}); st.plotly_chart(fig, use_container_width=True)
             else: st.warning("Hypothesis testing data is incomplete or missing.")
         except Exception as e: st.error("Could not perform Hypothesis Test."); logger.error(f"Error in Hypothesis Testing tool: {e}", exc_info=True)
     with tool_tabs[2]:
@@ -710,11 +605,9 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
         try:
             fmea_df = pd.concat([get_cached_df(ssm.get_data("risk_management_file", "dfmea")), get_cached_df(ssm.get_data("risk_management_file", "pfmea"))], ignore_index=True)
             if not fmea_df.empty:
-                fmea_df['RPN'] = fmea_df['S'] * fmea_df['O'] * fmea_df['D']
-                fmea_df = fmea_df.sort_values('RPN', ascending=False)
+                fmea_df['RPN'] = fmea_df['S'] * fmea_df['O'] * fmea_df['D']; fmea_df = fmea_df.sort_values('RPN', ascending=False)
                 fmea_df['cumulative_pct'] = (fmea_df['RPN'].cumsum() / fmea_df['RPN'].sum()) * 100
-                fig = go.Figure()
-                fig.add_trace(go.Bar(x=fmea_df['failure_mode'], y=fmea_df['RPN'], name='RPN', marker_color='#1f77b4'))
+                fig = go.Figure(); fig.add_trace(go.Bar(x=fmea_df['failure_mode'], y=fmea_df['RPN'], name='RPN', marker_color='#1f77b4'))
                 fig.add_trace(go.Scatter(x=fmea_df['failure_mode'], y=fmea_df['cumulative_pct'], name='Cumulative %', yaxis='y2', line=dict(color='#d62728')))
                 fig.update_layout(title="FMEA Pareto Chart: Prioritizing Risk", yaxis=dict(title='RPN'), yaxis2=dict(title='Cumulative %', overlaying='y', side='right', range=[0, 105]), xaxis_title='Failure Mode', showlegend=False)
                 st.plotly_chart(fig, use_container_width=True)
@@ -734,26 +627,24 @@ def render_statistical_tools_tab(ssm: SessionStateManager):
                 formula = 'seal_strength ~ temperature * pressure'; model = ols(formula, data=doe_df).fit()
                 anova_table = sm.stats.anova_lm(model, typ=2)
                 st.markdown("**Analysis of Variance (ANOVA) Table**"); st.caption("This table shows which factors significantly impact Seal Strength. Look for p-values (PR(>F)) < 0.05.")
-                st.dataframe(anova_table.style.applymap(lambda x: 'background-color: #eaf5ea' if x < 0.05 else '', subset=['PR(>F)']))
+                # FIX: Replaced deprecated `applymap` with `map`
+                st.dataframe(anova_table.style.map(lambda x: 'background-color: #eaf5ea' if x < 0.05 else '', subset=['PR(>F)']))
                 col1, col2 = st.columns(2)
                 with col1:
                     st.markdown("**Main Effects Plot**"); st.caption("Visualizes the average effect of changing each factor from low to high.")
                     main_effects_data = doe_df.melt(id_vars='seal_strength', value_vars=['temperature', 'pressure'], var_name='factor', value_name='level')
                     main_effects = main_effects_data.groupby(['factor', 'level'])['seal_strength'].mean().reset_index()
-                    fig = px.line(main_effects, x='level', y='seal_strength', color='factor', title="Main Effects on Seal Strength", markers=True, labels={'level': 'Factor Level (-1: Low, 1: High)', 'seal_strength': 'Mean Seal Strength'})
-                    st.plotly_chart(fig, use_container_width=True)
+                    fig = px.line(main_effects, x='level', y='seal_strength', color='factor', title="Main Effects on Seal Strength", markers=True, labels={'level': 'Factor Level (-1: Low, 1: High)', 'seal_strength': 'Mean Seal Strength'}); st.plotly_chart(fig, use_container_width=True)
                 with col2:
                     st.markdown("**Response Surface Contour Plot**"); st.caption("Visualizes the predicted response across the entire design space.")
                     t_range, p_range = np.linspace(-1.5, 1.5, 30), np.linspace(-1.5, 1.5, 30); t_grid, p_grid = np.meshgrid(t_range, p_range)
-                    grid = pd.DataFrame({'temperature': t_grid.ravel(), 'pressure': p_grid.ravel()})
-                    strength_grid = model.predict(grid).values.reshape(t_grid.shape)
+                    grid = pd.DataFrame({'temperature': t_grid.ravel(), 'pressure': p_grid.ravel()}); strength_grid = model.predict(grid).values.reshape(t_grid.shape)
                     opt_idx = np.unravel_index(np.argmax(strength_grid), strength_grid.shape)
                     opt_temp, opt_press = t_range[opt_idx[1]], p_range[opt_idx[0]]; opt_strength = strength_grid.max()
                     fig = go.Figure(data=[go.Contour(z=strength_grid, x=t_range, y=p_range, colorscale='Viridis', contours_coloring='lines', line_width=1)])
                     fig.add_trace(go.Scatter(x=doe_df['temperature'], y=doe_df['pressure'], mode='markers', marker=dict(color='black', size=10, symbol='x'), name='DOE Runs'))
                     fig.add_trace(go.Scatter(x=[opt_temp], y=[opt_press], mode='markers+text', marker=dict(color='red', size=16, symbol='star'), text=[' Optimum'], textposition="top right", name='Predicted Optimum'))
-                    fig.update_layout(xaxis_title="Temperature", yaxis_title="Pressure", title=f"Predicted Seal Strength (Max: {opt_strength:.1f})")
-                    st.plotly_chart(fig, use_container_width=True)
+                    fig.update_layout(xaxis_title="Temperature", yaxis_title="Pressure", title=f"Predicted Seal Strength (Max: {opt_strength:.1f})"); st.plotly_chart(fig, use_container_width=True)
             else: st.warning("DOE data is not available.")
         except Exception as e: st.error("Could not generate DOE plots."); logger.error(f"Error in DOE Analysis tool: {e}", exc_info=True)
 
@@ -762,13 +653,10 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
     st.header("🤖 Machine Learning Lab")
     st.info("Utilize predictive models to forecast outcomes, enabling proactive quality control and project management.")
     try:
-        from sklearn.ensemble import RandomForestClassifier
-        from sklearn.linear_model import LogisticRegression
-        from sklearn.model_selection import train_test_split
-        from sklearn.metrics import confusion_matrix
+        from sklearn.ensemble import RandomForestClassifier; from sklearn.linear_model import LogisticRegression
+        from sklearn.model_selection import train_test_split; from sklearn.metrics import confusion_matrix
     except ImportError:
-        st.error("This tab requires scikit-learn. Please install it (`pip install scikit-learn`) to enable ML features.", icon="🚨")
-        return
+        st.error("This tab requires scikit-learn. Please install it (`pip install scikit-learn`) to enable ML features.", icon="🚨"); return
     ml_tabs = st.tabs(["Predictive Quality (Batch Failure)", "Predictive Project Risk (Task Delay)"])
     with ml_tabs[0]:
         st.subheader("Predictive Quality: Manufacturing Batch Failure")
@@ -786,8 +674,7 @@ def render_machine_learning_lab_tab(ssm: SessionStateManager):
             data = {'temperature': np.random.normal(90, 5, n_samples), 'pressure': np.random.normal(300, 20, n_samples), 'viscosity': np.random.normal(50, 3, n_samples)}
             df = pd.DataFrame(data)
             fail_conditions = (df['temperature'] > 98) | (df['temperature'] < 82) | (df['pressure'] > 330) | (df['viscosity'] < 45)
-            df['status'] = np.where(fail_conditions, 'Fail', 'Pass')
-            df['status_code'] = df['status'].apply(lambda x: 1 if x == 'Fail' else 0)
+            df['status'] = np.where(fail_conditions, 'Fail', 'Pass'); df['status_code'] = df['status'].apply(lambda x: 1 if x == 'Fail' else 0)
             X = df[['temperature', 'pressure', 'viscosity']]; y = df['status_code']
             X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
             model = RandomForestClassifier(n_estimators=100, random_state=42); model.fit(X_train, y_train)
@@ -847,8 +734,7 @@ def render_compliance_guide_tab():
     with st.expander("▶️ **21 CFR Parts 210/211 & CGMP in a Design Context**"): st.markdown("This is the FDA's rulebook for pharmaceutical products. While this app focuses on the DHF (a device concept), design decisions for the device constituent part must be made with CGMP in mind. The goal is to ensure the final, combined product can be manufactured reliably, safely, and consistently.\n- **Material Compatibility:** The pill casing cannot contaminate or react with the drug. This is a design choice verified during V&V.\n- **Stability:** The device cannot cause the drug to degrade over its shelf life. This is confirmed via **Stability Studies**, a key CGMP activity.\n- **Sterilizability:** The design materials and construction must be compatible with the chosen sterilization method (e.g., EtO, gamma) without damaging the device or the drug.\n- **Aseptic Processing:** If applicable, the device must be designed to be assembled and filled in a sterile environment without introducing contamination.")
     with st.expander("▶️ **ISO 13485:2016: Quality Management Systems (International Standard)**"): st.markdown("ISO 13485 is the internationally recognized standard for a medical device Quality Management System (QMS). It is very similar to the FDA's QSR but is required for market access in many other regions, including Europe (as part of MDR), Canada, and Australia.\n- **Relationship to QSR:** Following the QSR gets you very close to ISO 13485 compliance. The key difference is that ISO 13485 places a stronger emphasis on **risk management** throughout the entire QMS.\n- **Why it matters:** A DHF built to QSR standards is easily adaptable for ISO 13485 audits, enabling global market strategies.")
     with st.expander("▶️ **ISO 14971:2019: Risk Management for Medical Devices (International Standard)**"): st.markdown("This is the global 'how-to' guide for risk management. Both the FDA and international regulators consider it the state-of-the-art process for ensuring device safety.\n- **Process:** It defines a lifecycle approach: identify hazards, estimate and evaluate risks, implement controls, and monitor the effectiveness of those controls.\n- **Role in this App:** The **'2. Risk Management'** section of the DHF Explorer is a direct implementation of the documentation required by ISO 14971.")
-    st.divider()
-    st.subheader("The Role of a Design Assurance Quality Engineer")
+    st.divider(); st.subheader("The Role of a Design Assurance Quality Engineer")
     st.markdown("A Design Assurance QE is the steward of the DHF, ensuring compliance, quality, and safety are designed into the product from day one. This tool is designed to be their primary workspace. Key responsibilities within this framework include:")
     with st.expander("✅ **Owning the Design History File (DHF)**"): st.markdown("The QE is responsible for the **creation, remediation, and maintenance** of the DHF. It's not just a repository; it's a living document that tells the story of the product's development.\n- This application serves as the DHF's active workspace.\n- **Key QE Goal:** Ensure the DHF is complete, coherent, and audit-ready at all times. The Traceability Matrix is the QE's primary tool for identifying gaps.")
     with st.expander("✅ **Driving Verification & Validation (V&V) Strategy**"): st.markdown("The QE doesn't just witness tests; they help architect the entire V&V strategy.\n- **V&V Master Plan:** This is a high-level document, referenced in the Design Plan, that outlines the scope, methods, and acceptance criteria for all V&V activities.\n- **Protocol & Report Review:** The QE reviews and approves all test protocols (to ensure they are adequate) and reports (to ensure they are accurate and complete). The 'Design Verification' and 'Design Validation' sections track these deliverables.")
@@ -856,31 +742,16 @@ def render_compliance_guide_tab():
         st.markdown("""Beyond foundational Design Controls, a Senior QE leverages advanced methodologies to ensure quality is built into the product proactively, not inspected in later. This is the core of **First-Time-Right (FTR)** initiatives, which aim to reduce the **Cost of Poor Quality (COPQ)**—the significant expenses associated with scrap, rework, complaints, and recalls.
 - **Quality by Design (QbD):** A systematic approach that begins with predefined objectives and emphasizes product and process understanding and control. The key is to identify **Critical Quality Attributes (CQAs)**—the physical, chemical, or biological characteristics that must be within a specific limit to ensure the desired product quality. These CQAs are then linked to the **Critical Material Attributes (CMAs)** of the raw materials and the **Critical Process Parameters (CPPs)** of the manufacturing process. The **QbD Tracker** on the main dashboard visualizes these crucial linkages.
 - **Failure Mode and Effects Analysis (FMEA):** A bottom-up, systematic tool for analyzing potential failure modes in a system. It is a core part of the risk management process.
-    - **Design FMEA (dFMEA):** Focuses on failures that can result from the **design** of the product (e.g., incorrect material choice, software bug).
-    - **Process FMEA (pFMEA):** Focuses on failures that can result from the **manufacturing process** (e.g., incorrect machine setting, operator error).
-    - The **Risk & FMEA Dashboard** shows highlights from both.
-- **Fault Tree Analysis (FTA):** A top-down, deductive failure analysis where a high-level system failure (e.g., 'Patient receives no therapy') is traced back to all the potential root causes. It's a powerful risk management tool used to understand complex failure modes, complementing the bottom-up FMEA. The project's `FTA-001` document would be part of the Risk Management File.
 - **Design of Experiments (DOE):** A statistical tool used to systematically determine the relationship between inputs (factors) and outputs of a process. Instead of testing one factor at a time, DOE allows for efficient exploration of the **design space**. It is used to identify the most critical CPPs and optimize their settings to ensure the process robustly produces products that meet their CQAs. The **DOE Analysis** tool in the `AI & Statistical Tools` tab provides a practical example.
 - **Statistical Process Control (SPC):** A method of quality control which employs statistical methods to monitor and control a process. This helps to ensure that the process operates efficiently, producing more specification-conforming product with less waste. The **SPC Chart** in the `AI & Statistical Tools` tab is a practical implementation.
-- **Hypothesis Testing:** A statistical method used to make decisions using data. For example, a t-test can determine if a new supplier's material is significantly stronger than the old one. The **Hypothesis Testing** tool in the `AI & Statistical Tools` tab demonstrates this.
-- **Process Capability (Cpk):** A statistical measure of a process's ability to produce output within specification limits. A Cpk value of **1.33 is considered capable**, while **1.67 is considered highly capable (6-sigma level)**. The 'Audit & Continuous Improvement' dashboard tracks this metric.
-- **Process Validation (IQ/OQ/PQ):** A cornerstone of CGMP and Design Transfer. It provides documented evidence that a process will consistently produce a product meeting its predetermined specifications.
-    - **Installation Qualification (IQ):** Confirms that the equipment has been installed correctly.
-    - **Operational Qualification (OQ):** Confirms that the equipment operates correctly across its entire operational range.
-    - **Performance Qualification (PQ):** Confirms that the equipment, under normal operating conditions, consistently produces product that meets all specifications. The 'DHF Sections Explorer' tracks these activities.""")
-    st.divider()
-    st.subheader("Visualizing the Process: The V-Model")
+- **Process Capability (Cpk):** A statistical measure of a process's ability to produce output within specification limits. A Cpk value of **1.33 is considered capable**, while **1.67 is considered highly capable (6-sigma level)**. The 'Audit & Continuous Improvement' dashboard tracks this metric.""")
+    st.divider(); st.subheader("Visualizing the Process: The V-Model")
     st.markdown("The V-Model is a powerful way to visualize the Design Controls process, emphasizing the critical link between design (left side) and testing (right side).")
     try:
         v_model_image_path = os.path.join(project_root, "dhf_dashboard", "v_model_diagram.png")
-        if os.path.exists(v_model_image_path):
-            st.image(v_model_image_path, caption="The V-Model illustrates the relationship between design decomposition and integration/testing.", use_column_width=True)
-        else:
-            st.error(f"Image Not Found: Ensure `v_model_diagram.png` is in the `dhf_dashboard` directory.", icon="🚨")
-            logger.warning(f"Could not find v_model_diagram.png at path: {v_model_image_path}")
-    except Exception as e:
-        st.error("An error occurred while trying to display the V-Model image.")
-        logger.error(f"Error loading V-Model image: {e}", exc_info=True)
+        if os.path.exists(v_model_image_path): st.image(v_model_image_path, caption="The V-Model illustrates the relationship between design decomposition and integration/testing.", use_column_width=True)
+        else: st.error(f"Image Not Found: Ensure `v_model_diagram.png` is in the `dhf_dashboard` directory.", icon="🚨"); logger.warning(f"Could not find v_model_diagram.png at path: {v_model_image_path}")
+    except Exception as e: st.error("An error occurred while trying to display the V-Model image."); logger.error(f"Error loading V-Model image: {e}", exc_info=True)
     col1, col2 = st.columns(2)
     with col1: st.subheader("Left Side: Decomposition & Design"); st.markdown("- **User Needs & Intended Use:** What problem does the user need to solve?\n- **Design Inputs (Requirements):** How must the device perform to meet those needs? This includes technical, functional, and safety requirements.\n- **System & Architectural Design:** How will the components be structured to meet the requirements?\n- **Detailed Design (Outputs):** At the lowest level, these are the final drawings, code, and specifications that are used to build the device.")
     with col2: st.subheader("Right Side: Integration & Testing"); st.markdown("- **Unit/Component Verification:** Does each individual part meet its detailed design specification?\n- **Integration & System Verification:** Do the assembled parts work together as defined in the architectural design?\n- **Design Validation:** Does the final, complete device meet the high-level User Needs? This is the ultimate test.")
@@ -893,39 +764,23 @@ def render_compliance_guide_tab():
 # --- MAIN APPLICATION LOGIC ---
 # ==============================================================================
 def main() -> None:
-    """
-    Main function to configure and run the Streamlit application.
-    """
+    """Main function to configure and run the Streamlit application."""
     st.set_page_config(layout="wide", page_title="DHF Command Center", page_icon="🚀")
     
-    try:
-        ssm = SessionStateManager()
-        logger.info("Application initialized. Session State Manager loaded.")
+    try: ssm = SessionStateManager(); logger.info("Application initialized. Session State Manager loaded.")
     except Exception as e:
         st.error("Fatal Error: Could not initialize Session State. The application cannot continue.")
-        logger.critical(f"Failed to instantiate SessionStateManager: {e}", exc_info=True)
-        st.stop()
+        logger.critical(f"Failed to instantiate SessionStateManager: {e}", exc_info=True); st.stop()
 
-    # --- Pre-process data (cached for performance) ---
-    try:
-        tasks_raw = ssm.get_data("project_management", "tasks")
-        tasks_df_processed = preprocess_task_data(tasks_raw)
+    try: tasks_raw = ssm.get_data("project_management", "tasks"); tasks_df_processed = preprocess_task_data(tasks_raw)
     except Exception as e:
-        st.error("Failed to process project task data for dashboard.")
-        logger.error(f"Error during task data pre-processing: {e}", exc_info=True)
+        st.error("Failed to process project task data for dashboard."); logger.error(f"Error during task data pre-processing: {e}", exc_info=True)
         tasks_df_processed = pd.DataFrame()
 
-    # --- HEADER ---
-    st.title("🚀 DHF Command Center")
-    project_name = ssm.get_data("design_plan", "project_name")
+    st.title("🚀 DHF Command Center"); project_name = ssm.get_data("design_plan", "project_name")
     st.caption(f"Live monitoring for the **{project_name}** project.")
 
-    # --- MAIN TABS ---
-    tab_names = [
-        "📊 **DHF Health Dashboard**", "🗂️ **DHF Sections Explorer**",
-        "🔬 **Advanced Analytics**", "📈 **Statistical Workbench**",
-        "🤖 **Machine Learning Lab**", "🏛️ **QE & Compliance Guide**"
-    ]
+    tab_names = ["📊 **DHF Health Dashboard**", "🗂️ **DHF Sections Explorer**", "🔬 **Advanced Analytics**", "📈 **Statistical Workbench**", "🤖 **Machine Learning Lab**", "🏛️ **QE & Compliance Guide**"]
     tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(tab_names)
 
     with tab1: render_health_dashboard_tab(ssm, tasks_df_processed)
@@ -934,7 +789,6 @@ def main() -> None:
     with tab4: render_statistical_tools_tab(ssm)
     with tab5: render_machine_learning_lab_tab(ssm)
     with tab6: render_compliance_guide_tab()
-
 
 # ==============================================================================
 # --- SCRIPT EXECUTION ---
