@@ -1,4 +1,3 @@
-#dhf_dashboard/utils/session_state_manager.py
 # --- Definitive, Corrected, and Unabridged Optimized Version ---
 """
 Manages the application's session state, acting as an in-memory database.
@@ -90,11 +89,13 @@ def _create_definitive_dhf_model(version: int) -> Dict[str, Any]:
         },
         "design_outputs": {
             "documents": [
-                {"id": "DO-001", "title": "User Needs Document", "phase": "User Needs", "status": "Approved", "linked_input_id": "UN-001"},
+                # FIX: Phase name now exactly matches the corresponding task name for correct filtering.
+                {"id": "DO-001", "title": "User Needs Document", "phase": "User Needs & Planning", "status": "Approved", "linked_input_id": "UN-001"},
                 {"id": "DO-002", "title": "System Requirements Spec", "phase": "Design Inputs", "status": "Approved", "linked_input_id": "UN-002"},
                 {"id": "SPEC-001", "title": "Pill Casing Final CAD Model", "phase": "Design Outputs", "status": "In Review", "linked_input_id": "SR-001"},
                 {"id": "SPEC-002", "title": "Dose Release Mechanism Spec", "phase": "Design Outputs", "status": "Draft", "linked_input_id": "RC-001"},
-                {"id": "PROTO-001", "title": "Biocompatibility Test Protocol", "phase": "V&V", "status": "Draft", "linked_input_id": "RC-002"},
+                # FIX: Phase name now exactly matches the corresponding task name for correct filtering.
+                {"id": "PROTO-001", "title": "Biocompatibility Test Protocol", "phase": "Verification & Validation", "status": "Draft", "linked_input_id": "RC-002"},
             ]
         },
         "design_reviews": {
@@ -111,7 +112,6 @@ def _create_definitive_dhf_model(version: int) -> Dict[str, Any]:
             ]
         },
         "design_verification": {
-            # OPTIMIZATION: Added `input_verified_id` for stronger, more realistic traceability.
             "tests": [
                 {"id": "VER-001", "test_name": "Pill Diameter Test", "status": "Completed", "output_verified": "SPEC-001", "input_verified_id": "SR-001", "risk_control_verified_id": ""},
                 {"id": "VER-002", "test_name": "Dose Accuracy Assay", "status": "In Progress", "output_verified": "SPEC-002", "input_verified_id": "RC-001", "risk_control_verified_id": "RC-001"},
@@ -182,7 +182,7 @@ class SessionStateManager:
     _DHF_DATA_KEY = "dhf_data"
     # Incrementing version forces a reload of the data model on app rerun
     # if the code changes, ensuring developers always have the latest mock data.
-    _CURRENT_DATA_VERSION = 20
+    _CURRENT_DATA_VERSION = 21
 
     def __init__(self):
         """
